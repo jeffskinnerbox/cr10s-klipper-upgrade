@@ -31,6 +31,13 @@ All commands share these rules:
 - One target failing never blocks the other (logged as `notify_failed`).
 - SIGTERM: logs `watch_stopped` and exits 0.
 
+## `cr10s-export MODEL.scad -o OUT.stl [-D name=value ...]`
+
+- Runs `openscad -q --export-format binstl -o OUT.stl [-D ...] MODEL.scad` with a timeout
+  (default 300 s).
+- Logs `export_ok` (file, size, seconds) or `export_failed` (exit code, stderr tail). Exit 4 on
+  failure or timeout.
+
 ## `cr10s-slice MODEL.stl --profiles DIR [--filament NAME] -o OUT.gcode`
 
 - Checks that the `orca-slicer` version matches the one recorded in `printer/profiles/VERSION`.
@@ -58,7 +65,7 @@ All commands share these rules:
 
 | Target   | Does                                                      |
 | :------- | :-------------------------------------------------------- |
-| `stl`    | `openscad -q --export-format binstl -o build/$(NAME).stl $(NAME).scad` |
+| `stl`    | `cr10s-export $(NAME).scad -o build/$(NAME).stl`          |
 | `gcode`  | `cr10s-slice build/$(NAME).stl --profiles $(PROFILES) -o build/$(NAME).gcode` |
 | `upload` | `cr10s-upload build/$(NAME).gcode --path $(NAME)`         |
 | `clean`  | `rm -rf build/`                                           |

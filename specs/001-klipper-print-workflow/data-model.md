@@ -30,7 +30,7 @@ One JSON object per line. Schema: [contracts/log-record.md](contracts/log-record
 | :-------- | :------- | :-------------------------------------------- |
 | `ts`      | str      | UTC ISO-8601 with `Z`, used for age pruning   |
 | `level`   | str      | `DEBUG`/`INFO`/`WARNING`/`ERROR`              |
-| `tool`    | str      | `upload`, `status`, `watch`, `slice`, `prune`, `backup`, `make` |
+| `tool`    | str      | `export`, `upload`, `status`, `watch`, `slice`, `prune`, `backup` |
 | `event`   | str      | snake_case, stable (e.g. `upload_ok`, `checksum_mismatch`) |
 | `run_id`  | str      | UUID; inherited from `CR10S_RUN_ID` if set    |
 | `msg`     | str      | short human text                              |

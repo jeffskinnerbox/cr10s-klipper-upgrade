@@ -72,6 +72,8 @@ within ±0.2 mm on X/Y/Z.
    **Then** each one moves the right way by 10 mm ±0.5 mm.
 1. **Given** a heater thermistor is unplugged or reads wrong, **When** a heat-up is started,
    **Then** the printer shuts the heater off and reports an error within 60 s.
+1. **Given** a heater is disconnected, **When** a heat-up is started, **Then** Klipper reports
+   "not heating at expected rate" and shuts down within 120 s.
 1. **Given** a homed printer, **When** a calibration cube is printed, **Then** it completes and
    measures within ±0.2 mm.
 
@@ -350,8 +352,8 @@ US5.
 - **SC-006**: Every build phase has a recorded pass for its test before the next phase starts.
 - **SC-007**: For any failed workflow run, the operator or Claude can find its cause from the logs
   in under 5 minutes.
-- **SC-008**: Log storage never goes over 50 MB per log file, and holds no records older than 180
-  days after cleanup.
+- **SC-008**: After each daily cleanup, no log file is over 50 MB and none holds records older
+  than 180 days.
 - **SC-009**: 0 secrets in the public repo history (secret scan clean).
 - **SC-010**: Restoring config to a replacement host needs zero wiring changes, and the restored
   printer passes the US1 test.

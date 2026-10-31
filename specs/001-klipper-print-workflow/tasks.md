@@ -33,6 +33,19 @@ the build phases in [plan.md](plan.md#build-phases).
 Single project at repo root: `src/cr10s/`, `tests/`, `printer/`, `docs/build/`, `docs/wiring/`,
 `systemd/` and `templates/`, per [plan.md](plan.md#project-structure).
 
+## Constitution Check
+
+| Principle | Enforced by |
+| :-- | :-- |
+| I. Phased and testable | Gate task at the end of each hardware story; the next story waits for PASS |
+| II. Safety first | Pre-power checklist in every wiring task; heater drills in T040; `print=false` tests T062, T066 and the T011 guard |
+| III. Portable config | Standard sections only (T031, T038); backup T088; restore drill T089 |
+| IV. Test-backed | Tests written first in every story; `make check` in T022 |
+| V. Observable | Logger T017; export T069, slice T070, upload T068, status T021, watch T080, prune T018 and backup T088 all log; prune timer T082 |
+| VI. No secrets | gitleaks T004 and T007; backup scan T088; history scan T105 |
+
+Each gate task records `II ✔` and `VI ✔` in the `Constitution` column of `docs/build/test-log.md`.
+
 ---
 
 ## Phase 1: Setup (Shared Infrastructure)
@@ -40,12 +53,12 @@ Single project at repo root: `src/cr10s/`, `tests/`, `printer/`, `docs/build/`, 
 **Purpose**: repo tooling, lint and secret scanning, before any code (Plan Phase 0, first half).
 
 - [ ] T001 Create directory skeleton with `.gitkeep` files: `src/cr10s/`, `tests/unit/`, `tests/integration/`, `tests/live/`, `tests/fixtures/`, `printer/config/`, `printer/firmware/`, `printer/profiles/`, `docs/build/`, `docs/wiring/`, `systemd/`, `templates/model-project/`
-- [ ] T002 Create `pyproject.toml` (uv, `requires-python = ">=3.12"`, package `cr10s` in `src/` layout). Runtime dependency: `httpx`. Dev group: `pytest`, `pytest-httpserver`, `ruff`, `pre-commit`. Console scripts `cr10s-upload`, `cr10s-status`, `cr10s-watch`, `cr10s-slice`, `cr10s-log-prune`, `cr10s-backup` pointing at `cr10s.<module>:main`. Run `uv sync` to make `uv.lock`
+- [ ] T002 Create `pyproject.toml` (uv, `requires-python = ">=3.12"`, package `cr10s` in `src/` layout). Runtime dependency: `httpx`. Dev group: `pytest`, `pytest-httpserver`, `ruff`, `pre-commit`. Console scripts `cr10s-export`, `cr10s-upload`, `cr10s-status`, `cr10s-watch`, `cr10s-slice`, `cr10s-log-prune`, `cr10s-backup` pointing at `cr10s.<module>:main`. Run `uv sync` to make `uv.lock`
 - [ ] T003 [P] Configure ruff (line-length 100, rules `E,F,W,I,B,UP,S`) and pytest markers `unit`, `integration`, `live` in `pyproject.toml`. Add a `--live` option in `tests/conftest.py` that skips `live`-marked tests unless it is given
 - [ ] T004 [P] Create `.pre-commit-config.yaml` with gitleaks, ruff (check + format), shellcheck (`shellcheck-py`), and markdownlint-cli2 set to `fix: false` via `.markdownlint-cli2.ci.jsonc`. Copy the rules from the dotfiles config but add `"fix": false`, and exclude `.claude/` and `.specify/` (vendored)
 - [ ] T005 [P] Add to `.gitignore`: `build/`, `*.jsonl`, `.venv/`, `printer/firmware/*.bin`, `.pytest_cache/`, `.ruff_cache/` (`.env*` and `config.toml` are already there)
-- [ ] T006 Create the root `Makefile` (`.RECIPEPREFIX = >`) with targets `lint` (ruff, shellcheck `bin/*` and `templates/**/*.sh`, markdownlint with the CI config), `test` (`uv run pytest -m "unit or integration"`), `test-live` (`uv run pytest -m live --live`), `check` (lint + test), `sync-docs` (`bin/sync-docs`) and `install` (left as a stub until T081)
-- [ ] T007 Run `pre-commit install`. Check that a staged file holding a fake `ghp_` + 36 alphanumerics is blocked by gitleaks. Record the result in `docs/build/test-log.md`, creating it with columns `Date | Phase/Task | Test | Result | Notes`
+- [ ] T006 Create the root `Makefile` (`.RECIPEPREFIX = >`) with targets `lint` (ruff, shellcheck `bin/*` and `templates/**/*.sh`, markdownlint with the CI config), `test` (`uv run pytest -m "unit or integration"`), `test-live` (`uv run pytest -m live --live`), `check` (lint + test), `sync-docs` (`bin/sync-docs`) and `install` (left as a stub until T083)
+- [ ] T007 Run `pre-commit install`. Check that a staged file holding a fake `ghp_` + 36 alphanumerics is blocked by gitleaks. Record the result in `docs/build/test-log.md`, creating it with columns `Date | Phase/Task | Test | Result | Constitution | Notes`
 
 **Checkpoint**: `make lint` passes on an empty package. A committed secret is blocked.
 
@@ -114,9 +127,9 @@ drill shuts down within 60 s; a 20 mm cube measures ±0.2 mm on X/Y/Z.
 - [ ] T037 [P] [US1] Write `docs/wiring/05-fans.md`: part fan FAN0 (P2.3); hot end fan on always-on 12 V for now, with HE1 (P2.4) set aside for US8; and the polarity check. Generate the PNG
 - [ ] T038 [US1] Expand `printer/config/printer.cfg` to the full motion config: `[stepper_x|y|z|z1]` with pins from research R1, rotation_distance per Klipper's Rotation Distance doc (CR-10S defaults: X/Y 40 with GT2 20T, Z 8 per lead screw), position_max X 300, Y 300, Z 400, `[tmc2209 …]` for all 5 with run_current from the motor spec, `[extruder]` (stock CR-10S extruder rotation_distance as a starting value, marked "calibrate"), `[heater_bed]`, `[fan]`, `[verify_heater extruder]` and `[verify_heater heater_bed]` at default settings, `max_temp` 260 for the extruder and 110 for the bed. Temporarily keep the stock Z switch on P1.27 for `[stepper_z]` until US2
 - [ ] T039 [P] [US1] Write `printer/config/macros.cfg`: `START_PRINT BED= EXTRUDER=` and `END_PRINT` (heaters off, motors off, park), using standard gcode_macro only. Add `[include macros.cfg]` to `printer/config/printer.cfg`
-- [ ] T040 [US1] Write `docs/build/phase-03-install-controller.md`: photograph and label every stock connector, remove the stock board, mount the SKR (printed mount, standoffs), wire it per `docs/wiring/00` to `05`, run the full pre-power checklist, power on with a hand on the switch, and then the exit test (`QUERY_ENDSTOPS` with each switch pressed and released; each axis jogs 10 mm ±0.5 mm the right way; `PID_CALIBRATE HEATER=extruder TARGET=210` and `HEATER=heater_bed TARGET=60`, then `SAVE_CONFIG`; heater fault drill: unplug TH0 during heat-up and expect a shutdown within 60 s; print a 20 mm cube and measure it to ±0.2 mm)
+- [ ] T040 [US1] Write `docs/build/phase-03-install-controller.md`: photograph and label every stock connector, remove the stock board, mount the SKR (printed mount, standoffs), wire it per `docs/wiring/00` to `05`, run the full pre-power checklist, power on with a hand on the switch, and then the exit test (`QUERY_ENDSTOPS` with each switch pressed and released; each axis jogs 10 mm ±0.5 mm the right way; `PID_CALIBRATE HEATER=extruder TARGET=210` and `HEATER=heater_bed TARGET=60`, then `SAVE_CONFIG`; heater fault drills: (a) unplug TH0 during heat-up, shutdown ≤ 60 s; (b) power off, unplug HE0, power on, `M104 S200`, expect "not heating at expected rate" ≤ 60 s; (c) same with HB unplugged and `M140 S60`, ≤ 120 s; reconnect each with power off; print a 20 mm cube and measure it to ±0.2 mm)
 - [ ] T041 [US1] Operator: carry out `docs/build/phase-03-install-controller.md`. Copy the post-`SAVE_CONFIG` `printer.cfg` from the Pad (Fluidd download) into `printer/config/printer.cfg` and commit it
-- [ ] T042 [US1] Gate: record the US1 results in `docs/build/test-log.md` (endstops, jog, PID, heater drill, cube dimensions). PASS is required before US2
+- [ ] T042 [US1] Gate: record the US1 results in `docs/build/test-log.md` (endstops, jog, PID, heater drills a/b/c, cube dimensions). PASS is required before US2. Also record `II ✔` (pre-power checklist done, no safety bypass) and `VI ✔` (`pre-commit run -a` clean) in the Constitution column
 
 **Checkpoint**: the printer works on Klipper. This is the MVP.
 
@@ -137,7 +150,7 @@ under 0.02 mm; a full-bed first layer is even; homing with the probe unplugged s
 - [ ] T046 [US2] Update `printer/config/macros.cfg`: `START_PRINT` runs `G28`, then `Z_TILT_ADJUST`, then `G28 Z`, then `BED_MESH_CALIBRATE`
 - [ ] T047 [US2] Complete `docs/build/phase-04-cr-touch.md`: mount the probe, remove the Z switch, wire it per `docs/wiring/06`, then prototype steps before any homing (`BLTOUCH_DEBUG COMMAND=pin_down`, then `pin_up`, `QUERY_PROBE` triggered/open, a finger under the nozzle on the first `G28 Z`), `PROBE_CALIBRATE` for z_offset, and the exit test from the Independent Test above
 - [ ] T048 [US2] Operator: carry out `docs/build/phase-04-cr-touch.md`. Commit the updated `printer/config/printer.cfg`
-- [ ] T049 [US2] Gate: record the US2 results (tilt before/after, PROBE_ACCURACY range, first-layer photo, unplugged-probe result) in `docs/build/test-log.md`
+- [ ] T049 [US2] Gate: record the US2 results (tilt before/after, PROBE_ACCURACY range, first-layer photo, unplugged-probe result) in `docs/build/test-log.md`. Also record `II ✔` (pre-power checklist done, no safety bypass) and `VI ✔` (`pre-commit run -a` clean) in the Constitution column
 
 **Checkpoint**: US1 and US2 pass.
 
@@ -152,12 +165,12 @@ under 0.02 mm; a full-bed first layer is even; homing with the probe unplugged s
 **Independent Test**: cutting the filament or holding it still mid-print pauses and parks; resume
 shows no shift; no false trips in 3 homing and load cycles.
 
-- [ ] T050 [P] [US3] Write `docs/wiring/07-sfs-v2.md` from the BTT SFS V2.0 manual (research R6, S18): connector pinout by function (switch signal, encoder signal, supply, GND), switch → E0DET (P1.26), encoder → E1DET (P1.25), and the supply voltage check against the manual. Warn that wire colors change between batches. Generate the PNG
+- [ ] T050 [P] [US3] Write `docs/wiring/07-sfs-v2.md` from the BTT SFS V2.0 manual (research R6, S18): connector pinout by function (switch signal, encoder signal, supply, GND), switch → E0DET (P1.26), encoder → E1DET (P1.25), and the supply voltage check against the manual. Warn that wire colors change between batches. End with the pre-power checklist: continuity per pin, no short between supply and GND, supply voltage measured at the connector with the board on and the device unplugged. Generate the PNG
 - [ ] T051 [US3] Update `printer/config/printer.cfg`: `[filament_switch_sensor sfs_switch] switch_pin: ^P1.26`, `pause_on_runout: True`; `[filament_motion_sensor sfs_motion] switch_pin: ^P1.25`, `detection_length: 10`, `extruder: extruder`, `pause_on_runout: True`. Start both in monitor mode (`pause_on_runout: False`) for the prototype step
 - [ ] T052 [US3] Update `printer/config/macros.cfg`: `PAUSE`/`RESUME` overrides with a park position (X 10, Y 290, Z +10 mm, retract 1 mm); `SFS_ENABLE`/`SFS_DISABLE` using `SET_FILAMENT_SENSOR SENSOR=sfs_motion ENABLE=1/0`; call `SFS_DISABLE` at Klipper start (`[delayed_gcode]`) and in `END_PRINT`, and `SFS_ENABLE` at the end of `START_PRINT`
-- [ ] T053 [US3] Write `docs/build/phase-05-sfs.md`: print the mount (S17), install it, wire it, run monitor mode on a test print and check the `runout_gcode` log lines, switch to `pause_on_runout: True`, then the exit test from the Independent Test above
+- [ ] T053 [US3] Write `docs/build/phase-05-sfs.md`: print the mount (S17), install it, wire it, run the pre-power checklist from `docs/wiring/07-sfs-v2.md` before power-on, run monitor mode on a test print and check the `runout_gcode` log lines, switch to `pause_on_runout: True`, then the exit test from the Independent Test above
 - [ ] T054 [US3] Operator: carry out `docs/build/phase-05-sfs.md`. Commit `printer/config/`
-- [ ] T055 [US3] Gate: record the US3 results in `docs/build/test-log.md`
+- [ ] T055 [US3] Gate: record the US3 results in `docs/build/test-log.md`. Also record `II ✔` (pre-power checklist done, no safety bypass) and `VI ✔` (`pre-commit run -a` clean) in the Constitution column
 
 **Checkpoint**: US1 to US3 pass.
 
@@ -174,11 +187,11 @@ prints are watched. Either order meets the constitution.
 baseline, and the reference part prints ≥30 % faster (SC-005).
 
 - [ ] T056 [US4] Operator: print the baseline ringing tower and the reference part at the current speed. Record the print time and photos in `docs/build/test-log.md` (the SC-005 baseline)
-- [ ] T057 [P] [US4] Write `docs/wiring/08-accelerometer.md`: how the Sonic Pad kit G-sensor connects to the Pad (research R4, verify), plus the fallback ADXL345 → SKR EXP2 SPI pin table (EXP2 pins from research S2) and the USB RP2040 option. Generate the PNG
+- [ ] T057 [P] [US4] Write `docs/wiring/08-accelerometer.md`: how the Sonic Pad kit G-sensor connects to the Pad (research R4, verify), plus the fallback ADXL345 → SKR EXP2 SPI pin table (EXP2 pins from research S2) and the USB RP2040 option. End with the pre-power checklist: continuity per pin, no short between supply and GND, supply voltage measured at the connector with the board on and the device unplugged. Generate the PNG
 - [ ] T058 [US4] Update `printer/config/printer.cfg`: `[adxl345]` per the Pad's G-sensor (verify the `cs_pin`/chip naming during the prototype) and `[resonance_tester] accel_chip: adxl345`, `probe_points: 150, 150, 20`. Leave `[input_shaper]` empty until calibration
-- [ ] T059 [US4] Write `docs/build/phase-08-input-shaping.md`: mount the sensor on the hot end, `ACCELEROMETER_QUERY` (values change when tapped), `SHAPER_CALIBRATE AXIS=X`, move it to the bed, `SHAPER_CALIBRATE AXIS=Y`, `SAVE_CONFIG`, retune `max_accel` per Klipper Resonance Compensation (S42), then the exit test
+- [ ] T059 [US4] Write `docs/build/phase-08-input-shaping.md`: mount the sensor on the hot end, run the pre-power checklist from `docs/wiring/08-accelerometer.md` before power-on, `ACCELEROMETER_QUERY` (values change when tapped), `SHAPER_CALIBRATE AXIS=X`, move it to the bed, `SHAPER_CALIBRATE AXIS=Y`, `SAVE_CONFIG`, retune `max_accel` per Klipper Resonance Compensation (S42), then the exit test
 - [ ] T060 [US4] Operator: carry out `docs/build/phase-08-input-shaping.md`. Commit `printer/config/printer.cfg` with the `[input_shaper]` values
-- [ ] T061 [US4] Gate: record the US4 results (shaper type and freq for X and Y, tower photos, reference time vs T056) in `docs/build/test-log.md`
+- [ ] T061 [US4] Gate: record the US4 results (shaper type and freq for X and Y, tower photos, reference time vs T056) in `docs/build/test-log.md`. Also record `II ✔` (pre-power checklist done, no safety bypass) and `VI ✔` (`pre-commit run -a` clean) in the Constitution column
 
 **Checkpoint**: US1 to US4 pass.
 
@@ -201,19 +214,21 @@ slicing.
 
 - [ ] T062 [P] [US5] Contract tests in `tests/integration/test_upload.py`: the upload form has `root=gcodes`, `print=false` and a `checksum` equal to the file's SHA-256, and never `print=true`. 201 gives exit 0 and prints the remote path plus time/filament. 422 gives exit 3 and event `checksum_mismatch`. Unreachable or hang gives exit 2 in ≤ 15 s. Non-`.gcode` or empty file gives exit 1. Checksum-ignored fallback (research R8): a size/metadata mismatch gives exit 3. `/printer/print/start` is never hit
 - [ ] T063 [P] [US5] Unit tests in `tests/unit/test_slice.py`: pull `Metadata/plate_1.gcode` out of a fixture `.gcode.3mf`; exit 4 when no plate G-code is present; use `xvfb-run` only when `$DISPLAY` is unset; version mismatch against `printer/profiles/VERSION` warns, and exits 4 with `--strict`. Mock the `orca-slicer` subprocess
-- [ ] T064 [P] [US5] Integration test in `tests/integration/test_model_template.py`: in a temp copy of `templates/model-project/` with a fixture `cube.scad`, a fake `openscad`/`orca-slicer` on `PATH` writing known outputs, and the fake Moonraker, `make upload` uploads once; a second `make upload` runs neither fake tool (mtime-based); all log records share one `run_id`
-- [ ] T065 [P] [US5] Live test in `tests/live/test_upload_live.py`: upload `tests/fixtures/cube.gcode` to `path=cr10s-live-test`, check the metadata, delete the file, and assert `print_stats.state == "standby"` throughout
+- [ ] T064 [P] [US5] Unit tests in `tests/unit/test_export.py`: builds the openscad command with `-D` overrides; logs `export_ok`; non-zero openscad exit gives exit 4 and `export_failed` with stderr tail; timeout gives exit 4. Mock the subprocess
+- [ ] T065 [P] [US5] Integration test in `tests/integration/test_model_template.py`: in a temp copy of `templates/model-project/` with a fixture `cube.scad`, a fake `openscad`/`orca-slicer` on `PATH` writing known outputs, and the fake Moonraker, `make upload` uploads once; a second `make upload` runs neither fake tool (mtime-based); all log records share one `run_id`, and they include `export_ok`, `slice_ok` and `upload_ok`
+- [ ] T066 [P] [US5] Live test in `tests/live/test_upload_live.py`: upload `tests/fixtures/cube.gcode` to `path=cr10s-live-test`, check the metadata, delete the file, and assert `print_stats.state == "standby"` throughout
 
 ### Implementation
 
-- [ ] T066 [P] [US5] Create `tests/fixtures/cube.scad` (a 20 mm cube) and `tests/fixtures/cube.gcode` (a tiny valid Klipper-flavor G-code with slicer header comments for metadata), plus `tests/fixtures/cube.gcode.3mf` (a zip with `Metadata/plate_1.gcode`)
-- [ ] T067 [US5] Implement `src/cr10s/upload.py` (`cr10s-upload FILE.gcode [--path DIR] [--name NAME]`) per [contracts/cli.md](contracts/cli.md#cr10s-upload-filegcode---path-dir---name-name). `print=false` is a hard-coded constant with no override, and the PrintFile fields come from data-model. After a 201, fetch metadata, and run the fallback size check if the Pad ignored the checksum
-- [ ] T068 [US5] Implement `src/cr10s/slice.py` (`cr10s-slice`) per [contracts/cli.md](contracts/cli.md#cr10s-slice-modelstl---profiles-dir---filament-name--o-outgcode): build the command from research R7, run it with a timeout (default 300 s), pull the plate G-code into `-o`, and log `slice_ok`/`slice_failed` with the stderr tail
-- [ ] T069 [US5] Create `templates/model-project/Makefile` (targets `stl`, `gcode`, `upload`, `clean`, per [contracts/cli.md](contracts/cli.md#model-project-makefile-templatesmodel-projectmakefile)), with `CR10S_RUN_ID ?= $(shell uuidgen)` exported, `NAME ?= $(notdir $(CURDIR))`, and `PROFILES ?=` the installed repo's `printer/profiles`. Also create `templates/model-project/.gitignore` (`build/`), `templates/model-project/README.md`, and `templates/model-project/NOTES.md` (tuning log)
-- [ ] T070 [US5] Prototype research R7: write `docs/build/phase-06-slicing.md` with steps to install the OrcaSlicer AppImage as `~/.local/bin/orca-slicer`, record `orca-slicer --help` output into `printer/profiles/CLI-NOTES.md`, and do one manual CLI slice. Update `src/cr10s/slice.py` flags to match, and record the version in `printer/profiles/VERSION`
-- [ ] T071 [US5] Operator: in the OrcaSlicer GUI, build the CR-10S machine, process and PLA profiles (G-code flavor Klipper, bed 300×300, height 400, start G-code `START_PRINT BED=[bed_temperature_initial_layer_single] EXTRUDER=[nozzle_temperature_initial_layer]`, end `END_PRINT`), and export them to `printer/profiles/machine.json`, `process.json` and `pla.json`. Add the Pad as a Physical Printer for GUI uploads with "start print after upload" off
-- [ ] T072 [US5] Complete `docs/build/phase-06-slicing.md` exit test: clean-checkout timing (< 3 min), skip on the second run, CLI vs GUI time/filament within 2 %, corrupt-upload and unreachable-host failures with log records
-- [ ] T073 [US5] Operator: carry out the exit test. Record it in `docs/build/test-log.md` (gate US5)
+- [ ] T067 [P] [US5] Create `tests/fixtures/cube.scad` (a 20 mm cube) and `tests/fixtures/cube.gcode` (a tiny valid Klipper-flavor G-code with slicer header comments for metadata), plus `tests/fixtures/cube.gcode.3mf` (a zip with `Metadata/plate_1.gcode`)
+- [ ] T068 [US5] Implement `src/cr10s/upload.py` (`cr10s-upload FILE.gcode [--path DIR] [--name NAME]`) per [contracts/cli.md](contracts/cli.md#cr10s-upload-filegcode---path-dir---name-name). `print=false` is a hard-coded constant with no override, and the PrintFile fields come from data-model. After a 201, fetch metadata, and run the fallback size check if the Pad ignored the checksum
+- [ ] T069 [US5] Implement `src/cr10s/export.py` (`cr10s-export MODEL.scad -o OUT.stl [-D name=value ...]`) per [contracts/cli.md](contracts/cli.md#cr10s-export-modelscad--o-outstl--d-namevalue-): run openscad with a 300 s timeout, log `export_ok`/`export_failed`, exit 4 on failure
+- [ ] T070 [US5] Implement `src/cr10s/slice.py` (`cr10s-slice`) per [contracts/cli.md](contracts/cli.md#cr10s-slice-modelstl---profiles-dir---filament-name--o-outgcode): build the command from research R7, run it with a timeout (default 300 s), pull the plate G-code into `-o`, and log `slice_ok`/`slice_failed` with the stderr tail
+- [ ] T071 [US5] Create `templates/model-project/Makefile` (targets `stl` calling `cr10s-export`, `gcode`, `upload`, `clean`, per [contracts/cli.md](contracts/cli.md#model-project-makefile-templatesmodel-projectmakefile)), with `CR10S_RUN_ID ?= $(shell uuidgen)` exported, `NAME ?= $(notdir $(CURDIR))`, and `PROFILES ?=` the installed repo's `printer/profiles`. Also create `templates/model-project/.gitignore` (`build/`), `templates/model-project/README.md`, and `templates/model-project/NOTES.md` (tuning log)
+- [ ] T072 [US5] Prototype research R7: write `docs/build/phase-06-slicing.md` with steps to install the OrcaSlicer AppImage as `~/.local/bin/orca-slicer`, record `orca-slicer --help` output into `printer/profiles/CLI-NOTES.md`, and do one manual CLI slice. Update `src/cr10s/slice.py` flags to match, and record the version in `printer/profiles/VERSION`
+- [ ] T073 [US5] Operator: in the OrcaSlicer GUI, build the CR-10S machine, process and PLA profiles (G-code flavor Klipper, bed 300×300, height 400, start G-code `START_PRINT BED=[bed_temperature_initial_layer_single] EXTRUDER=[nozzle_temperature_initial_layer]`, end `END_PRINT`), and export them to `printer/profiles/machine.json`, `process.json` and `pla.json`. Add the Pad as a Physical Printer for GUI uploads with "start print after upload" off
+- [ ] T074 [US5] Complete `docs/build/phase-06-slicing.md` exit test: clean-checkout timing (< 3 min), skip on the second run, CLI vs GUI time/filament within 2 %, corrupt-upload and unreachable-host failures with log records
+- [ ] T075 [US5] Operator: carry out the exit test. Record it in `docs/build/test-log.md` (gate US5). Also record `II ✔` (pre-power checklist done, no safety bypass) and `VI ✔` (`pre-commit run -a` clean) in the Constitution column
 
 **Checkpoint**: design to Pad in one command, with no auto-start.
 
@@ -231,19 +246,19 @@ Each event reaches both targets in ≤ 30 s. After a reboot and login the watche
 
 ### Tests (write first, must fail)
 
-- [ ] T074 [P] [US6] Unit tests in `tests/unit/test_watch_state.py`, a table-driven test of every transition in the [data-model watcher state machine](data-model.md#watcher-state-machine): print_started, print_paused (includes the filament message when `print_stats.message` has it), print_resumed, print_complete, print_cancelled, print_error, klipper_down, klipper_ready, host_unreachable after `unreachable_after` (3) failed polls and only once, host_recovered, print_stalled after `stall_min` (15) unchanged-progress minutes and only once per stall, and one `watch_started` summary on the first snapshot (no burst of alerts)
-- [ ] T075 [P] [US6] Unit tests in `tests/unit/test_notify.py`: notify-send is called with title/body/urgency; the ntfy POST to `<ntfy_url>/<topic>` has `Title`, `Priority` (`high` for error/klipper_down/unreachable/paused, otherwise `default`) and `Tags`; one target raising does not stop the other and logs `notify_failed`; an empty topic means ntfy is skipped; the topic never appears in log records
-- [ ] T076 [P] [US6] Integration test in `tests/integration/test_watch.py`: run `cr10s-watch` against fake-Moonraker scripted snapshots with `poll_s=2` and stub notifiers. Check the alert sequence and timing (each alert within 2 polls of its change), and that SIGTERM logs `watch_stopped` and exits 0
+- [ ] T076 [P] [US6] Unit tests in `tests/unit/test_watch_state.py`, a table-driven test of every transition in the [data-model watcher state machine](data-model.md#watcher-state-machine): print_started, print_paused (includes the filament message when `print_stats.message` has it), print_resumed, print_complete, print_cancelled, print_error, klipper_down, klipper_ready, host_unreachable after `unreachable_after` (3) failed polls and only once, host_recovered, print_stalled after `stall_min` (15) unchanged-progress minutes and only once per stall, and one `watch_started` summary on the first snapshot (no burst of alerts)
+- [ ] T077 [P] [US6] Unit tests in `tests/unit/test_notify.py`: notify-send is called with title/body/urgency; the ntfy POST to `<ntfy_url>/<topic>` has `Title`, `Priority` (`high` for error/klipper_down/unreachable/paused, otherwise `default`) and `Tags`; one target raising does not stop the other and logs `notify_failed`; an empty topic means ntfy is skipped; the topic never appears in log records
+- [ ] T078 [P] [US6] Integration test in `tests/integration/test_watch.py`: run `cr10s-watch` against fake-Moonraker scripted snapshots with `poll_s=2` and stub notifiers. Check the alert sequence and timing (each alert within 2 polls of its change), and that SIGTERM logs `watch_stopped` and exits 0
 
 ### Implementation
 
-- [ ] T077 [P] [US6] Implement `src/cr10s/notify.py`: an `Alert` dataclass (fields from data-model), `DesktopNotifier` (`notify-send -u <urgency> -a cr10s`), `NtfyNotifier` (httpx POST, 10 s timeout), and `send_all(alert, notifiers)` that sends to each target on its own and logs `alert_sent`/`notify_failed`
-- [ ] T078 [US6] Implement `src/cr10s/watch.py` (`cr10s-watch [--once] [--no-desktop] [--no-ntfy]`): a pure `transition(prev, curr, clock) -> list[Alert]` function (tested by T074), a poll loop at `watch.poll_s`, a SIGTERM handler, and `state_change` log records
-- [ ] T079 [P] [US6] Create `systemd/cr10s-watch.service` (user unit: `ExecStart=%h/.local/bin/cr10s-watch`, `Restart=on-failure`, `RestartSec=10`, `WantedBy=default.target`)
-- [ ] T080 [P] [US6] Create `systemd/cr10s-log-prune.service` (oneshot) and `systemd/cr10s-log-prune.timer` (`OnCalendar=daily`, `Persistent=true`)
-- [ ] T081 [US6] Implement the `install` target in the root `Makefile`: `uv tool install --force .`, copy `systemd/*` to `~/.config/systemd/user/`, `systemctl --user daemon-reload`, `enable --now cr10s-watch.service cr10s-log-prune.timer`. Add an `uninstall` target too. Add `bin/install-check` (bash, shellcheck-clean) that prints the unit status
-- [ ] T082 [US6] Write `docs/build/phase-07-monitoring.md`: subscribe to a random ntfy topic on the phone, set it in `config.toml`, `make install`, then the exit test from the Independent Test above, including the reboot/login check
-- [ ] T083 [US6] Operator: carry out the exit test. Record each event's delay for desktop and phone in `docs/build/test-log.md` (SC-003: 10 events, 100 % within 30 s)
+- [ ] T079 [P] [US6] Implement `src/cr10s/notify.py`: an `Alert` dataclass (fields from data-model), `DesktopNotifier` (`notify-send -u <urgency> -a cr10s`), `NtfyNotifier` (httpx POST, 10 s timeout), and `send_all(alert, notifiers)` that sends to each target on its own and logs `alert_sent`/`notify_failed`
+- [ ] T080 [US6] Implement `src/cr10s/watch.py` (`cr10s-watch [--once] [--no-desktop] [--no-ntfy]`): a pure `transition(prev, curr, clock) -> list[Alert]` function (tested by T076), a poll loop at `watch.poll_s`, a SIGTERM handler, and `state_change` log records
+- [ ] T081 [P] [US6] Create `systemd/cr10s-watch.service` (user unit: `ExecStart=%h/.local/bin/cr10s-watch`, `Restart=on-failure`, `RestartSec=10`, `WantedBy=default.target`)
+- [ ] T082 [P] [US6] Create `systemd/cr10s-log-prune.service` (oneshot) and `systemd/cr10s-log-prune.timer` (`OnCalendar=daily`, `Persistent=true`)
+- [ ] T083 [US6] Implement the `install` target in the root `Makefile`: `uv tool install --force .`, copy `systemd/*` to `~/.config/systemd/user/`, `systemctl --user daemon-reload`, `enable --now cr10s-watch.service cr10s-log-prune.timer`. Add an `uninstall` target too. Add `bin/install-check` (bash, shellcheck-clean) that prints the unit status
+- [ ] T084 [US6] Write `docs/build/phase-07-monitoring.md`: subscribe to a random ntfy topic on the phone, set it in `config.toml`, `make install`, then the exit test from the Independent Test above, including the reboot/login check
+- [ ] T085 [US6] Operator: carry out the exit test. Record each event's delay for desktop and phone in `docs/build/test-log.md` (SC-003: 10 events, 100 % within 30 s). Also record `II ✔` (pre-power checklist done, no safety bypass) and `VI ✔` (`pre-commit run -a` clean) in the Constitution column
 
 **Checkpoint**: long prints are watched.
 
@@ -261,15 +276,15 @@ fresh host passes the US1 cube; a planted failed upload is found in the logs in 
 
 ### Tests (write first, must fail)
 
-- [ ] T084 [P] [US7] Integration tests in `tests/integration/test_backup.py` against the fake Moonraker config root and a temp git repo: files are downloaded to `printer/config/` except `*.bkp` and logs; no diff gives `backup_no_change` and no commit; a diff gives one commit listing the changed files; a planted secret makes the gitleaks step fail with exit 5 and no commit (stub gitleaks as a script on `PATH`); `--logs` writes `klippy.log` under the state dir and never into the repo
-- [ ] T085 [P] [US7] Unit test in `tests/unit/test_log_query.py`: the `jq` examples in [contracts/log-record.md](contracts/log-record.md) give the expected records on fixture logs (skip if `jq` is missing)
+- [ ] T086 [P] [US7] Integration tests in `tests/integration/test_backup.py` against the fake Moonraker config root and a temp git repo: files are downloaded to `printer/config/` except `*.bkp` and logs; no diff gives `backup_no_change` and no commit; a diff gives one commit listing the changed files; a planted secret makes the gitleaks step fail with exit 5 and no commit (stub gitleaks as a script on `PATH`); `--logs` writes `klippy.log` under the state dir and never into the repo
+- [ ] T087 [P] [US7] Unit test in `tests/unit/test_log_query.py`: the `jq` examples in [contracts/log-record.md](contracts/log-record.md) give the expected records on fixture logs (skip if `jq` is missing)
 
 ### Implementation
 
-- [ ] T086 [US7] Implement `src/cr10s/backup.py` (`cr10s-backup [--no-commit] [--logs]`) per [contracts/cli.md](contracts/cli.md#cr10s-backup---no-commit---logs): list and download the config root, write it to `printer/config/`, `git add printer/config`, run `gitleaks protect --staged`, and commit with message `backup: <files>` plus the attribution footer
-- [ ] T087 [US7] Write `docs/build/phase-09-backup-restore.md`: run a backup after a macro change, then a restore drill (upload `printer/config/*` to a fresh Pad custom-printer profile or a test Pi running mainline Klipper, set the MCU serial, restart, run the US1 cube test), then a log drill (plant a bad-checksum upload, find it with `jq` by `event`)
-- [ ] T088 [US7] Write `docs/troubleshooting.md`: where each log lives (desktop `~/.local/state/cr10s/*.jsonl`, Pad `klippy.log` and `moonraker.log` via `cr10s-backup --logs`), common events and what they mean, MCU disconnect checks (USB cable, power, `dmesg` on the Pad via SSH if allowed by decision 3), and how to hand logs to Claude
-- [ ] T089 [US7] Operator: carry out `docs/build/phase-09-backup-restore.md`. Record it in `docs/build/test-log.md` (gate US7, SC-007, SC-010)
+- [ ] T088 [US7] Implement `src/cr10s/backup.py` (`cr10s-backup [--no-commit] [--logs]`) per [contracts/cli.md](contracts/cli.md#cr10s-backup---no-commit---logs): list and download the config root, write it to `printer/config/`, `git add printer/config`, run `gitleaks protect --staged`, and commit with message `backup: <files>` plus the attribution footer
+- [ ] T089 [US7] Write `docs/build/phase-09-backup-restore.md`: run a backup after a macro change, then a restore drill (upload `printer/config/*` to a fresh Pad custom-printer profile or a test Pi running mainline Klipper, set the MCU serial, restart, run the US1 cube test), then a log drill (plant a bad-checksum upload, find it with `jq` by `event`)
+- [ ] T090 [US7] Write `docs/troubleshooting.md`: where each log lives (desktop `~/.local/state/cr10s/*.jsonl`, Pad `klippy.log` and `moonraker.log` via `cr10s-backup --logs`), common events and what they mean, MCU disconnect checks (USB cable, power, `dmesg` on the Pad via SSH if allowed by decision 3), and how to hand logs to Claude
+- [ ] T091 [US7] Operator: carry out `docs/build/phase-09-backup-restore.md`. Record it in `docs/build/test-log.md` (gate US7, SC-007, SC-010). Also record `II ✔` (pre-power checklist done, no safety bypass) and `VI ✔` (`pre-commit run -a` clean) in the Constitution column
 
 **Checkpoint**: core feature complete (US1 to US7).
 
@@ -277,29 +292,29 @@ fresh host passes the US1 cube; a planted failed upload is found in the logs in 
 
 ## Phase 10: User Story 8 - Later hardware and software upgrades (Priority: P8)
 
-**Plan phases**: 11 to 16. **Depends on**: core sign-off (T104). Each sub-phase is independent and
+**Plan phases**: 11 to 16. **Depends on**: core sign-off (T106). Each sub-phase is independent and
 ends by re-running the US1 cube test plus its own test.
 
-- [ ] T090 [P] [US8] Write `docs/build/phase-11-webcam.md`: plug the USB webcam into the Pad, set up the webcam in Fluidd (and the Pad's camera settings), take a time-lapse; exit test: live view and a time-lapse file
-- [ ] T091 [P] [US8] Write `docs/build/phase-12-pei.md`: fit the PEI sheet, `PROBE_CALIBRATE` for a new z_offset, `SAVE_CONFIG`; exit test: first layer sticks, part releases when cool
-- [ ] T092 [P] [US8] Write `docs/build/phase-13-bmg.md` and update `printer/config/printer.cfg` `[extruder]` with `rotation_distance` and `gear_ratio: 50:17` per Klipper Rotation Distance (S44), then a pressure advance tower per S43; exit test: 100 mm extrude gives 100 ± 1 mm
-- [ ] T093 [P] [US8] Write `docs/wiring/09-hotend-5015.md` (5015 blower on FAN0 P2.3, hot end fan moved to HE1 P2.4 as `[heater_fan hotend_fan] heater_pin: P2.4`, `heater_temp: 50`) and `docs/build/phase-14-hotend-5015.md` (Micro Swiss install, duct print, raise `max_temp` to 285 only after checking the thermistor type, `PID_CALIBRATE` at 240); exit test: holds 260 °C ±2 °C for 10 min, overhang test beats baseline. Generate the PNG
-- [ ] T094 [P] [US8] Write `docs/build/phase-15-mainline-host.md`: full `cr10s-backup` first, follow the community mainline route (S35), install Mainsail, restore `printer/config/`, rebuild the MCU firmware to match the new host Klipper version (`printer/firmware/README.md`), and add the Moonraker `[notifier]` as an optional extra; exit test: US1 to US7 tests pass, and Mainsail serves the UI
-- [ ] T095 [P] [US8] Add a FreeCAD target to `templates/model-project/Makefile` (`STL from $(NAME).FCStd via freecadcmd export.py`) and `templates/model-project/export.py` (`Mesh.export` per S55, verified on the installed FreeCAD), plus a test in `tests/integration/test_model_template.py` with a fake `freecadcmd`; exit test: a FreeCAD part goes through the US5 test
-- [ ] T096 [US8] Operator: carry out each of T090 to T095 when the parts are on hand. Record each gate in `docs/build/test-log.md`
+- [ ] T092 [P] [US8] Write `docs/build/phase-11-webcam.md`: plug the USB webcam into the Pad, set up the webcam in Fluidd (and the Pad's camera settings), take a time-lapse; exit test: live view and a time-lapse file
+- [ ] T093 [P] [US8] Write `docs/build/phase-12-pei.md`: fit the PEI sheet, `PROBE_CALIBRATE` for a new z_offset, `SAVE_CONFIG`; exit test: first layer sticks, part releases when cool
+- [ ] T094 [P] [US8] Write `docs/build/phase-13-bmg.md` and update `printer/config/printer.cfg` `[extruder]` with `rotation_distance` and `gear_ratio: 50:17` per Klipper Rotation Distance (S44), then a pressure advance tower per S43; exit test: 100 mm extrude gives 100 ± 1 mm
+- [ ] T095 [P] [US8] Write `docs/wiring/09-hotend-5015.md` (5015 blower on FAN0 P2.3, hot end fan moved to HE1 P2.4 as `[heater_fan hotend_fan] heater_pin: P2.4`, `heater_temp: 50`) and `docs/build/phase-14-hotend-5015.md` (Micro Swiss install, duct print, raise `max_temp` to 285 only after checking the thermistor type, `PID_CALIBRATE` at 240); exit test: holds 260 °C ±2 °C for 10 min, overhang test beats baseline. End with the pre-power checklist: continuity per pin, no short between supply and GND, supply voltage measured at the connector with the board on and the device unplugged. Generate the PNG
+- [ ] T096 [P] [US8] Write `docs/build/phase-15-mainline-host.md`: full `cr10s-backup` first, follow the community mainline route (S35), install Mainsail, restore `printer/config/`, rebuild the MCU firmware to match the new host Klipper version (`printer/firmware/README.md`), and add the Moonraker `[notifier]` as an optional extra; exit test: US1 to US7 tests pass, and Mainsail serves the UI
+- [ ] T097 [P] [US8] Add a FreeCAD target to `templates/model-project/Makefile` (`STL from $(NAME).FCStd via freecadcmd export.py`) and `templates/model-project/export.py` (`Mesh.export` per S55, verified on the installed FreeCAD), plus a test in `tests/integration/test_model_template.py` with a fake `freecadcmd`; exit test: a FreeCAD part goes through the US5 test
+- [ ] T098 [US8] Operator: carry out each of T092 to T097 when the parts are on hand. Record each gate in `docs/build/test-log.md`. Also record `II ✔` (pre-power checklist done, no safety bypass) and `VI ✔` (`pre-commit run -a` clean) in the Constitution column
 
 ---
 
 ## Phase 11: Polish & Cross-Cutting Concerns
 
-- [ ] T097 [P] Write `docs/build/README.md`: an index of build phases with links, the order, the gates, and the safety rules (Constitution II) at the top
-- [ ] T098 [P] Write `docs/wiring/README.md`: an index of wiring docs, the full SKR V1.4 pin-use table (research R1), and a list of free pins
-- [ ] T099 [P] Update `README.md`: status badge to `in progress` or `core complete`, Quick Start (`uv sync`, `make check`, `make install`, `config.example.toml`), and the project tree with `src/`, `printer/`, `templates/` and `systemd/`
-- [ ] T100 [P] Update `CLAUDE.md`: commands (`make check`, `make test-live`, `uv run pytest tests/unit/test_prune.py::test_age_rule` for a single test, `bin/sync-docs`), and the package layout
-- [ ] T101 Run `bin/sync-docs` and commit `docs/prd.md` and `docs/plan.md` if the masters changed
-- [ ] T102 Run the [quickstart.md](quickstart.md) sections 1 to 5 end to end. Fix anything that diverges
-- [ ] T103 Run `pre-commit run -a` and `gitleaks detect` on the full history; record the result in `docs/build/test-log.md` (SC-009)
-- [ ] T104 Core sign-off (Plan Phase 10): re-run the US1 to US7 exit tests, check SC-001 to SC-010 in `docs/build/test-log.md`, and tag the release `git tag -a v1.0-core`
+- [ ] T099 [P] Write `docs/build/README.md`: an index of build phases with links, the order, the gates, and the safety rules (Constitution II) at the top
+- [ ] T100 [P] Write `docs/wiring/README.md`: an index of wiring docs, the full SKR V1.4 pin-use table (research R1), and a list of free pins
+- [ ] T101 [P] Update `README.md`: status badge to `in progress` or `core complete`, Quick Start (`uv sync`, `make check`, `make install`, `config.example.toml`), and the project tree with `src/`, `printer/`, `templates/` and `systemd/`
+- [ ] T102 [P] Update `CLAUDE.md`: commands (`make check`, `make test-live`, `uv run pytest tests/unit/test_prune.py::test_age_rule` for a single test, `bin/sync-docs`), and the package layout
+- [ ] T103 Run `bin/sync-docs` and commit `docs/prd.md` and `docs/plan.md` if the masters changed
+- [ ] T104 Run the [quickstart.md](quickstart.md) sections 1 to 5 end to end. Fix anything that diverges
+- [ ] T105 Run `pre-commit run -a` and `gitleaks detect` on the full history; record the result in `docs/build/test-log.md` (SC-009)
+- [ ] T106 Core sign-off (Plan Phase 10): re-run the US1 to US7 exit tests, check SC-001 to SC-010 in `docs/build/test-log.md`, and tag the release `git tag -a v1.0-core`
 
 ---
 
@@ -314,8 +329,8 @@ ends by re-running the US1 cube test plus its own test.
   parallel with the hardware stories. Their live exit tests need the US1 gate (and US3 for the
   filament alert).
 - **US7**: code needs Foundational. The live restore drill needs the US1 gate.
-- **US8**: needs core sign-off (T104).
-- **Polish**: T097 to T103 any time after their inputs exist. T104 last, before US8.
+- **US8**: needs core sign-off (T106).
+- **Polish**: T099 to T105 any time after their inputs exist. T106 last, before US8.
 
 ### User Story Dependencies
 
@@ -325,11 +340,11 @@ Setup → Foundational ─┬─> US1 ─> US2 ─> US3
                       ├─> US5 (code) ──> US5 live (after US1)
                       ├─> US6 (code) ──> US6 live (after US1, US3)
                       └─> US7 (code) ──> US7 drill (after US1)
-US1..US7 gates ─> T104 core sign-off ─> US8 (T090..T096, any order)
+US1..US7 gates ─> T106 core sign-off ─> US8 (T092..T098, any order)
 ```
 
 Suggested physical order (matches plan.md): Foundational → US1 → US2 → US3 → US5 live →
-US6 live → US4 → US7 → T104 → US8.
+US6 live → US4 → US7 → T106 → US8.
 
 ### Within Each User Story
 
@@ -344,8 +359,8 @@ US6 live → US4 → US7 → T104 → US8.
 - Foundational tests: T008 to T013 together. T014 alongside them.
 - US1: wiring docs T029 and T030, then T034 to T037, all [P].
 - While the operator does US1 to US4 hardware, Claude can build US5, US6 and US7 code (T062 to
-  T069, T074 to T081, T084 to T086).
-- US8 sub-phases T090 to T095 are fully independent.
+  T071, T076 to T083, T086 to T088).
+- US8 sub-phases T092 to T097 are fully independent.
 
 ---
 
@@ -387,7 +402,7 @@ Task: "Write docs/wiring/05-fans.md + PNG"
 
 1. US2 (leveling), then US3 (filament): each one is gated.
 1. US5 and US6 (built during US1 to US3) go live: the new workflow plus alerts.
-1. US4 tuning, then US7 drills, then T104 tags `v1.0-core`.
+1. US4 tuning, then US7 drills, then T106 tags `v1.0-core`.
 1. US8 upgrades as parts arrive.
 
 ### Solo Operator + Claude
@@ -403,4 +418,5 @@ Task: "Write docs/wiring/05-fans.md + PNG"
 - [P] = different files, no unfinished dependencies.
 - Make a `.bak` copy before editing an existing file (user rule). `*.bak*` is git-ignored.
 - Commit after each task or logical group. Never commit `config.toml`, `.env*` or firmware binaries.
+- Every `docs/wiring/*.md` ends with a pre-power checklist, and every build guide that wires something runs it before power-on (Constitution II).
 - Never add a code path that sends `print=true` or calls `/printer/print/start` (Constitution II).

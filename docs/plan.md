@@ -67,21 +67,21 @@ both targets in ≤ 30 s. Watcher poll every 5 s (slower than Moonraker's 1–2 
 Tools must not hang: HTTP timeout 10 s, upload fails within 15 s if the host is down.
 `verify_heater` stays on.
 
-**Scale/Scope**: 1 printer, 1 operator, 1 desktop. About 6 CLI commands and ~1.5k lines of
+**Scale/Scope**: 1 printer, 1 operator, 1 desktop. About 7 CLI commands and ~1.5k lines of
 Python. About 12 build/wiring docs.
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-| Principle                   | How this plan complies                                                                 | Status |
+| Principle | How this plan complies | Status |
 | :-------------------------- | :------------------------------------------------------------------------------------- | :----- |
-| I. Phased and testable      | 11 core phases. Each one has an exit test and a sign-off line in `docs/build/test-log.md`. | Pass |
-| II. Safety first            | Pre-power checklist in every wiring phase. Heater fault test in Phase 3. `print=false` is hard-coded and tested (contract + live). | Pass |
-| III. Portable config        | `printer/config/` uses standard sections only. `cr10s-backup` puts the Pad config in git. Phase 9 does a restore drill. | Pass |
-| IV. Test-backed automation  | uv + pytest + ruff + shellcheck. Fake Moonraker integration tests. Opt-in `--live` tests. | Pass |
-| V. Observable               | `cr10s.log` used by every tool. Daily `cr10s-log-prune` timer (180 d, then 50 MB halving). | Pass |
-| VI. No secrets in git       | Config outside the repo. `.env*` ignored. gitleaks pre-commit set up in Phase 0, before any code. | Pass |
+| I. Phased and testable | 11 core phases. Each one has an exit test and a sign-off line in `docs/build/test-log.md`. | Pass |
+| II. Safety first | Pre-power checklist in every wiring phase. Heater fault test in Phase 3. `print=false` is hard-coded and tested (contract + live). | Pass |
+| III. Portable config | `printer/config/` uses standard sections only. `cr10s-backup` puts the Pad config in git. Phase 9 does a restore drill. | Pass |
+| IV. Test-backed automation | uv + pytest + ruff + shellcheck. Fake Moonraker integration tests. Opt-in `--live` tests. | Pass |
+| V. Observable | `cr10s.log` used by every tool. Daily `cr10s-log-prune` timer (180 d, then 50 MB halving). | Pass |
+| VI. No secrets in git | Config outside the repo. `.env*` ignored. gitleaks pre-commit set up in Phase 0, before any code. | Pass |
 
 Post-design re-check (after data-model and contracts): **Pass**. No violations, so Complexity
 Tracking is not needed.
@@ -133,6 +133,7 @@ cr10s-klipper-upgrade/
 │   ├── notify.py               # notify-send + ntfy senders
 │   ├── prune.py                # cr10s-log-prune
 │   ├── backup.py               # cr10s-backup
+│   ├── export.py               # cr10s-export (OpenSCAD wrapper, logs export_ok/failed)
 │   └── slice.py                # cr10s-slice (OrcaSlicer wrapper, 3MF -> gcode)
 ├── templates/model-project/    # Makefile + .gitignore copied into model repos
 ├── systemd/                    # cr10s-watch.service, cr10s-log-prune.{service,timer}
@@ -207,8 +208,11 @@ keeps working on stock Marlin until Phase 3, so you can still print while Phases
 - **Proto**: before connecting any motor, use a multimeter to pair each motor's coil leads.
 - **Safety**: pre-power checklist (continuity, no VIN–GND short, polarity, driver orientation).
 - **Test (US1)**: `QUERY_ENDSTOPS` changes state when each switch is pressed. Each axis moves the
-  right way by 10 mm ±0.5 mm. `PID_CALIBRATE` passes for the hot end and bed. Heater fault drill:
-  unplug the thermistor during heat-up and Klipper must shut down within 60 s. A 20 mm calibration
+  right way by 10 mm ±0.5 mm. `PID_CALIBRATE` passes for the hot end and bed. Heater fault drills:
+  (a) range check: unplug the thermistor during heat-up and Klipper must shut down within 60 s;
+  (b) `verify_heater`: power off, unplug HE0 heater leads, power on, `M104 S200` and expect
+  "Heater extruder not heating at expected rate" within 60 s; repeat with HB unplugged and
+  `M140 S60` (expect shutdown within 120 s). Reconnect with power off. A 20 mm calibration
   cube prints within ±0.2 mm. Back up the config to git by hand.
 
 ### Phase 4 — CR Touch: Z homing, dual-Z tilt, bed mesh
@@ -241,7 +245,7 @@ keeps working on stock Marlin until Phase 3, so you can still print while Phases
 - **Cfg**: in the OrcaSlicer GUI, build the CR-10S machine/process/PLA profiles with Klipper
   G-code flavor, and export them to `printer/profiles/`. Add the Pad as a Physical Printer for GUI
   uploads.
-- **Code**: `cr10s-slice` (version check, `xvfb-run` if needed, 3MF → `.gcode`), and
+- **Code**: `cr10s-export` (OpenSCAD wrapper with logging), `cr10s-slice` (version check, `xvfb-run` if needed, 3MF → `.gcode`), and
   `templates/model-project/Makefile` (`stl`, `gcode`, `upload`, `clean`).
 - **Proto**: run `orca-slicer --help` and do one manual CLI slice, to confirm the flags and output
   (research R7).
@@ -303,7 +307,7 @@ keeps working on stock Marlin until Phase 3, so you can still print while Phases
 | Pad sees mainline SKR over USB              | Phase 2   | bench test before taking the printer apart                 |
 | TMC2209 UART on all 5 sockets               | Phase 2   | `DUMP_TMC` per stepper                                     |
 | Endstop polarity                            | Phase 3   | `QUERY_ENDSTOPS` pressed and released                      |
-| Heater fault protection                     | Phase 3   | thermistor-unplug drill                                    |
+| Heater fault protection                     | Phase 3   | thermistor-unplug drill + heater-unplug drill (verify_heater) |
 | CR Touch wiring                             | Phase 4   | multimeter pin check + `BLTOUCH_DEBUG` before homing       |
 | SFS pinout and supply                       | Phase 5   | BTT manual + multimeter; monitor mode (`pause_on_runout: False`) first |
 | OrcaSlicer CLI flags/output                 | Phase 6   | `--help` + one manual slice                                |
@@ -340,15 +344,15 @@ reference docs used for config syntax.
 
 | Key | Title | URL | Checked |
 | :-- | :---- | :-- | :------ |
-| S1  | Klipper: generic-bigtreetech-skr-v1.4.cfg | <https://github.com/Klipper3d/klipper/blob/master/config/generic-bigtreetech-skr-v1.4.cfg> | F |
-| S2  | Marlin: pins_BTT_SKR_V1_4.h | <https://github.com/MarlinFirmware/Marlin/blob/bugfix-2.1.x/Marlin/src/pins/lpc1768/pins_BTT_SKR_V1_4.h> | F |
-| S3  | Klipper: Installation | <https://www.klipper3d.org/Installation.html> | D |
-| S4  | BIGTREETECH Wiki: SKR V1.4 | <https://global.bttwiki.com/SKR%20V1.4.html> | P |
-| S5  | CrealityTech/sonic_pad_os (GitHub) | <https://github.com/CrealityTech/sonic_pad_os> | S |
-| S6  | Dremc: Creality Sonic Pad support article | <https://support.dremc.com.au/support/solutions/articles/51000321087-creality-sonic-pad> | S, P |
-| S7  | All3DP: Which 3D Printer Is Compatible with the Creality Sonic Pad? | <https://all3dp.com/2/creality-sonic-pad-compatibility-3d-printer/> | S |
-| S8  | Voron Docs: Setup a BTT Smart Filament Sensor | <https://docs.vorondesign.com/community/howto/samwiseg0/btt_smart_filament_sensor.html> | F |
-| S9  | Klipper Discourse: Sonic pad and kobra max | <https://klipper.discourse.group/t/sonic-pad-and-kobra-max/10048/20> | S |
+| S1 | Klipper: generic-bigtreetech-skr-v1.4.cfg | <https://github.com/Klipper3d/klipper/blob/master/config/generic-bigtreetech-skr-v1.4.cfg> | F |
+| S2 | Marlin: pins_BTT_SKR_V1_4.h | <https://github.com/MarlinFirmware/Marlin/blob/bugfix-2.1.x/Marlin/src/pins/lpc1768/pins_BTT_SKR_V1_4.h> | F |
+| S3 | Klipper: Installation | <https://www.klipper3d.org/Installation.html> | D |
+| S4 | BIGTREETECH Wiki: SKR V1.4 | <https://global.bttwiki.com/SKR%20V1.4.html> | P |
+| S5 | CrealityTech/sonic_pad_os (GitHub) | <https://github.com/CrealityTech/sonic_pad_os> | S |
+| S6 | Dremc: Creality Sonic Pad support article | <https://support.dremc.com.au/support/solutions/articles/51000321087-creality-sonic-pad> | S, P |
+| S7 | All3DP: Which 3D Printer Is Compatible with the Creality Sonic Pad? | <https://all3dp.com/2/creality-sonic-pad-compatibility-3d-printer/> | S |
+| S8 | Voron Docs: Setup a BTT Smart Filament Sensor | <https://docs.vorondesign.com/community/howto/samwiseg0/btt_smart_filament_sensor.html> | F |
+| S9 | Klipper Discourse: Sonic pad and kobra max | <https://klipper.discourse.group/t/sonic-pad-and-kobra-max/10048/20> | S |
 | S10 | Klipper Discourse: Creality Sonic Pad and Alternatives | <https://klipper.discourse.group/t/creality-sonic-pad-and-alternatives/6324> | S |
 | S11 | Klipper Discourse: SonicPad and Ender 5 S1 will not connect | <https://klipper.discourse.group/t/sonicpad-and-ender-5-s1-will-not-connect/16989> | S |
 | S12 | Klipper: Measuring Resonances | <https://www.klipper3d.org/Measuring_Resonances.html> | D, S |

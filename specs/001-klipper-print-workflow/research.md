@@ -13,9 +13,9 @@ prototype step. Source keys such as [S1] refer to the Sources list in [plan.md](
   | :------------------ | :----------- | :------- | :------------------------------------- |
   | X step/dir/en       | XM driver    | P2.2 / P2.6 / !P2.1   | `[stepper_x]`                 |
   | Y step/dir/en       | YM driver    | P0.19 / P0.20 / !P2.8 | `[stepper_y]`                 |
-  | Z step/dir/en       | ZAM driver   | P0.22 / P2.11 / !P0.21 | `[stepper_z]`                |
+  | Z step/dir/en       | ZAM driver   | P0.22 / !P2.11 / !P0.21 | `[stepper_z]`               |
   | Z1 step/dir/en      | E1M driver   | P1.15 / P1.14 / !P1.16 | `[stepper_z1]`               |
-  | E0 step/dir/en      | E0M driver   | P2.13 / P0.11 / !P2.12 | `[extruder]`                 |
+  | E0 step/dir/en      | E0M driver   | P2.13 / !P0.11 / !P2.12 | `[extruder]`                |
   | TMC UART X/Y/Z/E0/E1| driver socket| P1.10 / P1.9 / P1.8 / P1.4 / P1.1 | `[tmc2209 …] uart_pin` |
   | X endstop           | X-STOP       | P1.29    | `endstop_pin: P1.29` (polarity in test) |
   | Y endstop           | Y-STOP       | P1.28    | `endstop_pin: P1.28`                   |
@@ -28,6 +28,9 @@ prototype step. Source keys such as [S1] refer to the Sources list in [plan.md](
   | Bed thermistor      | TB           | P0.25    | `[heater_bed] sensor_pin`              |
   | Part fan            | FAN0         | P2.3     | `[fan]`                                |
   | Spare PWM (later 5015 / hot end fan) | HE1 | P2.4 | `[heater_fan]` or `[fan_generic]` |
+
+  Z1 on E1M starts with the same direction as Z (`!P1.14`). The T040 jog test confirms all
+  directions.
 
 - **Rationale**: the Klipper config is the upstream reference. The Marlin header confirms the
   servo (P2.0) and probe (P0.10) pins, which the Klipper generic config leaves out.
