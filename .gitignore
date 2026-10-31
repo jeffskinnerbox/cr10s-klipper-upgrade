@@ -93,3 +93,9 @@ Thumbs.db
 .vagrant
 
 full_build/backup/
+
+### Local config / secrets (cr10s tools)
+.env
+.env.*
+config.toml
+!config.example.toml

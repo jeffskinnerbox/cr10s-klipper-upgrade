@@ -1,0 +1,403 @@
+# Implementation Plan: CR-10S Klipper Upgrade and Automated Print Workflow
+
+**Branch**: `001-klipper-print-workflow` (spec-kit feature id; work happens on `main`) | **Date**: 2026-10-30 | **Spec**: [spec.md](spec.md)
+
+**Input**: Feature specification from `specs/001-klipper-print-workflow/spec.md`
+
+Related: [research.md](research.md) · [data-model.md](data-model.md) ·
+[contracts/](contracts/) · [quickstart.md](quickstart.md) · [docs/decisions.md](../../docs/decisions.md)
+
+## Summary
+
+Move a CR-10S from its stock 8-bit board to a BTT SKR V1.4 with five TMC2209 drivers, run by the
+Sonic Pad's stock Klipper host. Then add CR Touch homing/mesh, independent dual-Z tilt, the BTT SFS
+V2 sensor and input shaping. On the desktop, a small Python toolkit (`cr10s`) plus a Makefile
+template turns an OpenSCAD model into an uploaded, never-auto-started print. A `systemd --user`
+watcher sends desktop and ntfy alerts. Every tool logs JSON lines, which are trimmed by age and
+size. The work is split into 11 core phases (0–10) plus 6 later phases (11–16). Each phase adds
+hardware, wiring, config and code together, and ends with a pass/fail test.
+
+## Technical Context
+
+**Language/Version**: Python ≥3.12 (desktop tools); Bash 5 (Makefile glue, wrappers); Klipper
+config (INI-style `printer.cfg`)
+
+**Primary Dependencies**:
+
+| Package / tool          | Use                                       | Where        |
+| :---------------------- | :---------------------------------------- | :----------- |
+| `uv`                    | env + packaging, console scripts          | desktop      |
+| `httpx`                 | Moonraker HTTP client (timeouts, multipart) | runtime    |
+| `tomllib` (stdlib)      | read `~/.config/cr10s/config.toml`        | runtime      |
+| `pytest`                | unit + integration tests                  | dev          |
+| `pytest-httpserver`     | fake Moonraker server for tests           | dev          |
+| `ruff`                  | lint + format                             | dev          |
+| `shellcheck`            | Bash lint                                 | dev (apt)    |
+| `pre-commit` + `gitleaks` | secret scan on commit                   | dev          |
+| `markdownlint-cli2`     | doc lint (existing config)                | dev (npm)    |
+| `openscad`              | STL export (CLI)                          | desktop (apt)|
+| OrcaSlicer (AppImage)   | slicing (CLI) + profile export (GUI)      | desktop      |
+| `xvfb` (`xvfb-run`)     | headless display for OrcaSlicer if needed | desktop (apt)|
+| `libnotify-bin` (`notify-send`) | desktop alerts                    | desktop (apt)|
+| ntfy.sh (HTTP)          | phone push                                | service      |
+| Klipper (mainline src)  | build SKR V1.4 MCU firmware               | desktop build|
+| `gcc-arm-none-eabi`, `make` | Klipper firmware toolchain            | desktop (apt)|
+| `/wiring_diagram` skill | wiring PNGs from pin tables               | docs         |
+
+**Storage**: files only. G-code is stored on the Pad (Moonraker `gcodes` root). Logs go to
+`~/.local/state/cr10s/*.jsonl`. Config lives in `~/.config/cr10s/config.toml` (git-ignored, outside
+the repo). Printer config backups go to `printer/config/` in this repo.
+
+**Testing**: `pytest` with three markers: `unit`, `integration` (fake Moonraker) and `live`
+(opt-in with `--live`, needs the Pad, never prints). Bash is checked with `shellcheck`. Each hardware
+phase has a manual acceptance checklist in `docs/build/phase-NN-*.md`, with results recorded in
+`docs/build/test-log.md`.
+
+**Target Platform**: Ubuntu desktop (x86_64). Sonic Pad running the stock Creality Klipper fork
+(Fluidd). SKR V1.4 (LPC1768, or LPC1769 on the Turbo).
+
+**Project Type**: CLI toolkit + hardware build docs + printer config
+
+**Performance Goals**: `make upload` ready on the Pad in < 3 min for a typical part. Alerts reach
+both targets in ≤ 30 s. Watcher poll every 5 s (slower than Moonraker's 1–2 s guidance).
+
+**Constraints**: LAN only. No print auto-start. No secrets in git. Standard Klipper sections only.
+Tools must not hang: HTTP timeout 10 s, upload fails within 15 s if the host is down.
+`verify_heater` stays on.
+
+**Scale/Scope**: 1 printer, 1 operator, 1 desktop. About 6 CLI commands and ~1.5k lines of
+Python. About 12 build/wiring docs.
+
+## Constitution Check
+
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+
+| Principle                   | How this plan complies                                                                 | Status |
+| :-------------------------- | :------------------------------------------------------------------------------------- | :----- |
+| I. Phased and testable      | 11 core phases. Each one has an exit test and a sign-off line in `docs/build/test-log.md`. | Pass |
+| II. Safety first            | Pre-power checklist in every wiring phase. Heater fault test in Phase 3. `print=false` is hard-coded and tested (contract + live). | Pass |
+| III. Portable config        | `printer/config/` uses standard sections only. `cr10s-backup` puts the Pad config in git. Phase 9 does a restore drill. | Pass |
+| IV. Test-backed automation  | uv + pytest + ruff + shellcheck. Fake Moonraker integration tests. Opt-in `--live` tests. | Pass |
+| V. Observable               | `cr10s.log` used by every tool. Daily `cr10s-log-prune` timer (180 d, then 50 MB halving). | Pass |
+| VI. No secrets in git       | Config outside the repo. `.env*` ignored. gitleaks pre-commit set up in Phase 0, before any code. | Pass |
+
+Post-design re-check (after data-model and contracts): **Pass**. No violations, so Complexity
+Tracking is not needed.
+
+## Project Structure
+
+### Documentation (this feature)
+
+```text
+specs/001-klipper-print-workflow/
+├── checklists/requirements.md
+├── contracts/
+│   ├── cli.md              # command-line contract for every cr10s tool
+│   ├── config.md           # config.toml schema
+│   ├── log-record.md       # JSON-lines log schema
+│   └── moonraker-subset.md # endpoints we call + fake server behavior
+├── data-model.md
+├── plan.md                 # this file (synced to docs/plan.md)
+├── quickstart.md
+├── research.md
+├── spec.md                 # synced to docs/prd.md
+└── tasks.md                # created by /speckit-tasks
+```
+
+### Source Code (repository root)
+
+```text
+cr10s-klipper-upgrade/
+├── bin/
+│   └── sync-docs               # copy spec.md -> docs/prd.md, plan.md -> docs/plan.md
+├── docs/
+│   ├── build/                  # step-by-step assembly per phase + test-log.md
+│   ├── wiring/                 # per-subsystem pin tables + PNG diagrams
+│   ├── decisions.md
+│   ├── prd.md                  # synced copy (do not edit)
+│   └── plan.md                 # synced copy (do not edit)
+├── printer/
+│   ├── config/                 # printer.cfg, macros.cfg, moonraker.conf (backed up from Pad)
+│   ├── firmware/               # Klipper .config for SKR V1.4 + build notes (no binaries)
+│   └── profiles/               # OrcaSlicer machine/process/filament JSON
+├── src/cr10s/
+│   ├── __init__.py
+│   ├── config.py               # load config.toml + env overrides
+│   ├── log.py                  # JSON-lines logger
+│   ├── moonraker.py            # thin httpx client
+│   ├── upload.py               # cr10s-upload
+│   ├── status.py               # cr10s-status
+│   ├── watch.py                # cr10s-watch (state machine + alerts)
+│   ├── notify.py               # notify-send + ntfy senders
+│   ├── prune.py                # cr10s-log-prune
+│   ├── backup.py               # cr10s-backup
+│   └── slice.py                # cr10s-slice (OrcaSlicer wrapper, 3MF -> gcode)
+├── templates/model-project/    # Makefile + .gitignore copied into model repos
+├── systemd/                    # cr10s-watch.service, cr10s-log-prune.{service,timer}
+├── tests/
+│   ├── unit/
+│   ├── integration/            # fake Moonraker (pytest-httpserver)
+│   ├── live/                   # opt-in, never prints
+│   └── fixtures/               # sample .scad, .gcode, aged/oversized logs
+├── .pre-commit-config.yaml
+├── pyproject.toml
+├── Makefile                    # check, test, lint, install, sync-docs
+└── README.md
+```
+
+**Structure Decision**: a single Python package (`src/` layout) plus `printer/` for the printer
+artifacts and `docs/` for build guides. Model projects live in their own repos (decision 7) and
+copy `templates/model-project/`.
+
+## Build Phases
+
+Each phase lists its **HW** (assembly), **Wire**, **Cfg** (printer/Pad config), **Code**,
+**Proto** (prototype or check to do first) and **Test** (exit gate). Don't start a phase until
+the exit test of the one before it is recorded as a pass in `docs/build/test-log.md`. The printer
+keeps working on stock Marlin until Phase 3, so you can still print while Phases 0–2 are under way.
+
+### Phase 0 — Repo foundation (no hardware)
+
+- **Code**: `pyproject.toml` (uv), `src/cr10s/{config,log}.py`, `cr10s-log-prune`, fake Moonraker
+  fixture, `Makefile` targets (`check`, `test`, `lint`), `.pre-commit-config.yaml` (gitleaks, ruff,
+  shellcheck, markdownlint), `bin/sync-docs`, and `.gitignore` additions (`.env*`, `build/`,
+  `*.jsonl`).
+- **Test**: `make check` passes. Committing a dummy `ghp_…` token gets blocked by gitleaks.
+  Prune tests pass on fixture logs (a 200-day-old record is removed; a 60 MB file is halved).
+  `bin/sync-docs` makes byte-identical copies.
+
+### Phase 1 — Pad on the network + status/upload tools (Pad only, printer untouched)
+
+- **HW**: power the Pad and connect it to the LAN by Ethernet.
+- **Cfg**: DHCP reservation and hostname (`sonicpad.lan`). Record the UI and Moonraker ports. Add
+  the desktop to `[authorization] trusted_clients` (editable from Fluidd's config editor).
+- **Code**: `moonraker.py`, `cr10s-status`, `cr10s-upload` (checksum, `print=false`, timeouts).
+- **Proto**: with curl, check whether the Pad fork accepts `checksum` (upload a file with a wrong
+  hash and expect a 422) and returns `estimated_time` metadata.
+- **Test**: `cr10s-status` shows `klippy_state`. The live suite uploads `tests/fixtures/cube.gcode`,
+  then deletes it, and the print state stays `standby`. Integration tests cover 201, 422, timeout and
+  unreachable cases.
+
+### Phase 2 — Bench prototype: SKR V1.4 + Pad (outside the printer)
+
+- **HW**: SKR on an insulated bench mat. Fit five TMC2209s in UART mode (remove the DIAG pin or cut
+  it per the BTT manual, set the UART jumpers). Note the driver orientation from the board marking.
+- **Wire**: SKR USB to the Pad. One spare motor on the XM driver. 12 V bench supply (or the CR-10S
+  PSU, unplugged while wiring).
+- **Cfg**: build Klipper (`printer/firmware/skr14.config`) and flash it from SD as `firmware.bin`.
+  Write a minimal `printer.cfg` for the Pad's custom-printer slot.
+- **Proto**: check that the Pad finds `/dev/serial/by-id/usb-Klipper_lpc1768…`, and that the
+  host/MCU protocol versions match (research R2). If they don't, rebuild from the Pad's Klipper
+  version.
+- **Test**: the MCU shows as connected in Fluidd. `DUMP_TMC STEPPER=…` reads all five drivers.
+  `FORCE_MOVE` turns the bench motor both ways. `docs/wiring/00-power-and-host.md` and
+  `docs/wiring/01-drivers.md` are written.
+
+### Phase 3 — Install controller in the CR-10S (motion, heat, fans)
+
+- **HW**: take out the stock board and mount the SKR (printed mount, standoffs). Label every
+  connector before you unplug it.
+- **Wire**: PSU → board power (VIN, HB). X/Y/Z/Z1/E motors. X/Y endstops. Hot end heater and
+  thermistor. Bed heater and thermistor. Part fan (FAN0). Hot end fan always on (12 V). Make one
+  wiring doc per subsystem with a `/wiring_diagram` PNG.
+- **Cfg**: full `printer.cfg`: kinematics, rotation_distance, TMC run_current, `[stepper_z1]` on
+  E1, `verify_heater`, PID.
+- **Proto**: before connecting any motor, use a multimeter to pair each motor's coil leads.
+- **Safety**: pre-power checklist (continuity, no VIN–GND short, polarity, driver orientation).
+- **Test (US1)**: `QUERY_ENDSTOPS` changes state when each switch is pressed. Each axis moves the
+  right way by 10 mm ±0.5 mm. `PID_CALIBRATE` passes for the hot end and bed. Heater fault drill:
+  unplug the thermistor during heat-up and Klipper must shut down within 60 s. A 20 mm calibration
+  cube prints within ±0.2 mm. Back up the config to git by hand.
+
+### Phase 4 — CR Touch: Z homing, dual-Z tilt, bed mesh
+
+- **HW**: CR Touch mount on the carriage. Remove the Z endstop switch.
+- **Wire**: CR Touch to SERVOS (P2.0) and PROBE (P0.10), pin by pin per the table, using an
+  adapter cable. Check with a multimeter before power-on (research R5).
+- **Cfg**: `[bltouch]` with offsets, `[safe_z_home]`, `[z_tilt]` (two points), `[bed_mesh]`
+  (300×300, 7×7). Add `Z_TILT_ADJUST` and `BED_MESH_CALIBRATE` to the start macro.
+- **Proto**: `BLTOUCH_DEBUG COMMAND=pin_down/pin_up` and `QUERY_PROBE` before any homing.
+  Hold a finger under the nozzle on the first `G28 Z`.
+- **Test (US2)**: with the gantry tilted 1–2 mm, `Z_TILT_ADJUST` brings it within 0.05 mm.
+  `PROBE_ACCURACY` range < 0.02 mm. A full-bed first-layer print looks even. With the probe
+  unplugged, homing stops with an error.
+
+### Phase 5 — BTT SFS V2 filament sensor
+
+- **HW**: printed SFS mount on the 2020 frame.
+- **Wire**: switch to E0DET (P1.26), encoder to E1DET (P1.25), with supply per the BTT manual
+  (research R6).
+- **Cfg**: `[filament_switch_sensor]`, `[filament_motion_sensor]` (`detection_length: 10`),
+  `PAUSE`/`RESUME` with park, and macros that enable the sensor at print start and disable it at
+  end and on idle.
+- **Test (US3)**: cut the filament mid-print and the print pauses and parks. Hold the filament
+  still and the print pauses. Resume shows no layer shift. No false trip in 3 homing and
+  load/unload cycles.
+
+### Phase 6 — One-command slicing and upload (OpenSCAD + OrcaSlicer)
+
+- **Cfg**: in the OrcaSlicer GUI, build the CR-10S machine/process/PLA profiles with Klipper
+  G-code flavor, and export them to `printer/profiles/`. Add the Pad as a Physical Printer for GUI
+  uploads.
+- **Code**: `cr10s-slice` (version check, `xvfb-run` if needed, 3MF → `.gcode`), and
+  `templates/model-project/Makefile` (`stl`, `gcode`, `upload`, `clean`).
+- **Proto**: run `orca-slicer --help` and do one manual CLI slice, to confirm the flags and output
+  (research R7).
+- **Test (US5)**: in a sample model repo, from a clean checkout, `make upload` is done in < 3 min
+  and the print stays `standby`. A second `make upload` with no changes skips export and slicing.
+  CLI and GUI slices agree within 2 % on time and filament. Corrupt-upload and unreachable-host
+  tests fail cleanly with log records.
+
+### Phase 7 — Monitoring and alerts
+
+- **Code**: `cr10s-watch` (state machine, see [data-model.md](data-model.md)), `notify.py`
+  (notify-send + ntfy, each target on its own), and `systemd/cr10s-watch.service` and
+  `cr10s-log-prune.timer`. Add `make install` to set them up.
+- **Test (US6)**: integration tests drive the fake Moonraker through every state change and check
+  that the right alerts are sent and none repeat. Live: start, pause, resume, cancel and complete a
+  short print, and unplug the SKR USB mid-idle. Each event reaches the desktop and phone in ≤ 30 s.
+  After a reboot and login the watcher is running.
+
+### Phase 8 — Input shaping (ADXL345)
+
+- **HW**: mount the Pad kit G-sensor on the hot end, then on the bed (bed slinger).
+- **Wire**: G-sensor to the Pad per Creality's kit. Fallback: SKR EXP2 SPI (research R4).
+- **Proto**: `ACCELEROMETER_QUERY` returns values that change when you tap the mount.
+- **Cfg**: `[resonance_tester]` and `[input_shaper]` from `SHAPER_CALIBRATE`. Retune
+  `max_accel`.
+- **Test (US4)**: a ringing tower at ≥1.5× the old speed shows no more ringing than the untuned
+  baseline. The reference part prints ≥30 % faster (SC-005).
+
+### Phase 9 — Backup, restore, hardening
+
+- **Code**: `cr10s-backup` (Moonraker `config` root download → `printer/config/` → git diff →
+  commit, with a secret scan).
+- **Test (US7)**: change a macro on the Pad, run `cr10s-backup`, and the commit holds only that
+  change. Restore drill: copy `printer/config/` to a fresh Pad profile (or a test Pi). It homes and
+  passes the US1 cube test with no rewiring. Log drill: find a planted failed upload by event name
+  in < 5 min.
+
+### Phase 10 — Core sign-off
+
+- **Test**: run all of US1–US7 again end-to-end and check SC-001…SC-010. Tag the release
+  `v1.0-core`.
+
+### Later phases (each independent; each re-runs the US1 test plus its own test)
+
+| Phase | Upgrade                               | Key work                                                                 | Exit test                                         |
+| :---- | :------------------------------------ | :----------------------------------------------------------------------- | :------------------------------------------------ |
+| 11    | USB webcam                            | Plug into the Pad and set up `[webcam]`/crowsnest in the Pad UI           | Live view and time-lapse in Fluidd                 |
+| 12    | PEI spring steel sheet                | Swap the bed surface. `PROBE_CALIBRATE` for a new Z offset                 | First-layer test sticks; part releases when cool  |
+| 13    | BMG extruder                          | Mount it, set `rotation_distance` and gear ratio, then retune pressure advance | 100 mm extrude = 100 ± 1 mm; PA tower clean   |
+| 14    | Micro Swiss hot end + 5015 blower     | Swap the hot end. 5015 on FAN0, hot end fan on HE1 `[heater_fan]`. Printed duct. PID again | Holds 260 °C ±2 °C; overhang test beats baseline |
+| 15    | Pad to Debian/mainline + Mainsail     | Back up, reflash the Pad per the community guide, restore config, rebuild the MCU to match | US1–US7 pass on mainline; Mainsail serves the UI |
+| 16    | FreeCAD export                        | `freecadcmd export.py` target in the model template                       | FreeCAD part goes through US5                      |
+
+## Prototyping and Testing Summary
+
+| Item to prove                               | When      | How                                                       |
+| :------------------------------------------ | :-------- | :-------------------------------------------------------- |
+| Pad fork honors upload `checksum` / metadata | Phase 1  | curl with a bad hash → 422, metadata has `estimated_time`  |
+| Pad sees mainline SKR over USB              | Phase 2   | bench test before taking the printer apart                 |
+| TMC2209 UART on all 5 sockets               | Phase 2   | `DUMP_TMC` per stepper                                     |
+| Endstop polarity                            | Phase 3   | `QUERY_ENDSTOPS` pressed and released                      |
+| Heater fault protection                     | Phase 3   | thermistor-unplug drill                                    |
+| CR Touch wiring                             | Phase 4   | multimeter pin check + `BLTOUCH_DEBUG` before homing       |
+| SFS pinout and supply                       | Phase 5   | BTT manual + multimeter; monitor mode (`pause_on_runout: False`) first |
+| OrcaSlicer CLI flags/output                 | Phase 6   | `--help` + one manual slice                                |
+| G-sensor on the Pad                         | Phase 8   | `ACCELEROMETER_QUERY`                                      |
+| Logging + pruning                           | Phase 0   | fixtures (aged and oversized logs)                         |
+| No auto-start                               | 1, 6, 7   | contract test asserts `print=false`; live state stays `standby` |
+
+## Logging Design (summary)
+
+- Every tool calls `cr10s.log.get(tool)` and writes one JSON object per line to
+  `~/.local/state/cr10s/<tool>.jsonl`. Schema: [contracts/log-record.md](contracts/log-record.md).
+- The `run_id` (UUID) for each command run ties records together across tools: the `make upload`
+  chain passes `CR10S_RUN_ID`.
+- `cr10s-log-prune` runs daily (`systemd --user` timer, `Persistent=true` so missed runs catch up).
+  It drops records older than `retention_days` (180), then, if a file is still over `max_bytes`
+  (50 MB), drops its oldest half. Each prune logs its own summary.
+- Klipper's own `klippy.log` stays on the Pad. `cr10s-backup --logs` can copy it for diagnosis.
+
+## Risks
+
+| Risk                                                | Mitigation                                                         |
+| :-------------------------------------------------- | :----------------------------------------------------------------- |
+| Pad fork rejects the mainline MCU or misses API features | Phase 1–2 prototypes come before the printer is taken apart. Fallbacks: build from the Pad's Klipper version, or a Pi/BTT Pad 7 host (config is portable) |
+| CR Touch damaged by wiring                          | Pin table + multimeter check. Never trust wire colors               |
+| OrcaSlicer CLI changes                              | Version check in `cr10s-slice`. Pin the AppImage version in docs    |
+| Missed alerts while the desktop sleeps              | Accepted (decision 4). Watcher reports the current state on resume  |
+| Mains/heater wiring                                 | Unplug first. Pre-power checklist. Heater fault drill               |
+
+## Sources
+
+Checked = how the source was used: **F** fetched/read on 2026-10-30, **S** seen in search results
+on 2026-10-30, **P** carried over from `input/my-vision.md` / `input/new-workflow.md`, **D** standard
+reference docs used for config syntax.
+
+| Key | Title | URL | Checked |
+| :-- | :---- | :-- | :------ |
+| S1  | Klipper: generic-bigtreetech-skr-v1.4.cfg | <https://github.com/Klipper3d/klipper/blob/master/config/generic-bigtreetech-skr-v1.4.cfg> | F |
+| S2  | Marlin: pins_BTT_SKR_V1_4.h | <https://github.com/MarlinFirmware/Marlin/blob/bugfix-2.1.x/Marlin/src/pins/lpc1768/pins_BTT_SKR_V1_4.h> | F |
+| S3  | Klipper: Installation | <https://www.klipper3d.org/Installation.html> | D |
+| S4  | BIGTREETECH Wiki: SKR V1.4 | <https://global.bttwiki.com/SKR%20V1.4.html> | P |
+| S5  | CrealityTech/sonic_pad_os (GitHub) | <https://github.com/CrealityTech/sonic_pad_os> | S |
+| S6  | Dremc: Creality Sonic Pad support article | <https://support.dremc.com.au/support/solutions/articles/51000321087-creality-sonic-pad> | S, P |
+| S7  | All3DP: Which 3D Printer Is Compatible with the Creality Sonic Pad? | <https://all3dp.com/2/creality-sonic-pad-compatibility-3d-printer/> | S |
+| S8  | Voron Docs: Setup a BTT Smart Filament Sensor | <https://docs.vorondesign.com/community/howto/samwiseg0/btt_smart_filament_sensor.html> | F |
+| S9  | Klipper Discourse: Sonic pad and kobra max | <https://klipper.discourse.group/t/sonic-pad-and-kobra-max/10048/20> | S |
+| S10 | Klipper Discourse: Creality Sonic Pad and Alternatives | <https://klipper.discourse.group/t/creality-sonic-pad-and-alternatives/6324> | S |
+| S11 | Klipper Discourse: SonicPad and Ender 5 S1 will not connect | <https://klipper.discourse.group/t/sonicpad-and-ender-5-s1-will-not-connect/16989> | S |
+| S12 | Klipper: Measuring Resonances | <https://www.klipper3d.org/Measuring_Resonances.html> | D, S |
+| S13 | Clever Creations: Input Shaping in Klipper — The Accelerometer Method | <https://clevercreations.org/adxl345-klipper-accelerometer-ender-3/> | S |
+| S14 | Klipper: BL-Touch | <https://www.klipper3d.org/BLTouch.html> | D, S |
+| S15 | Klipper Discourse: SKR 1.4 "PROBE" pin not working for BL-Touch | <https://klipper.discourse.group/t/skr-1-4-probe-pin-not-working-for-bl-touch/7816> | S |
+| S16 | simeonpashley/klipper_config (GitHub) | <https://github.com/simeonpashley/klipper_config> | P |
+| S17 | Printables: BTT SFS V2 2020 Mount | <https://www.printables.com/model/797870-btt-sfs-v2-2020-mount> | S, P |
+| S18 | BTT SFS V2.0 User Manual (PDF) | <https://github.com/bigtreetech/smart-filament-detection-module/blob/master/V2.0/Manual/SFS%20V2.0%20User%20Manual_20231123.pdf> | P |
+| S19 | Dremc: Creality Ender 3 V2 Filament Sensor (SFS) | <https://support.dremc.com.au/support/solutions/articles/51000492388-creality-ender-3-v2-filament-sensor-sfs-> | S |
+| S20 | OrcaSlicer Wiki: CLI mode | <https://www.orcaslicer.com/wiki/cli/cli_mode> | F |
+| S21 | Printago: Orca Slicer CLI Reference | <https://printago.io/blog/orca-slicer-cli-reference> | F |
+| S22 | Moonraker: File Manager API | <https://moonraker.readthedocs.io/en/latest/external_api/file_manager/> | F |
+| S23 | Moonraker: External API Introduction | <https://moonraker.readthedocs.io/en/latest/external_api/introduction/> | P |
+| S24 | ntfy: Publishing | <https://docs.ntfy.sh/publish/> | F |
+| S25 | Moonraker: Integrations API | <https://moonraker.readthedocs.io/en/stable/external_api/integrations/> | P |
+| S26 | nlef/moonraker-telegram-bot (GitHub) | <https://github.com/nlef/moonraker-telegram-bot> | P |
+| S27 | logrotate(8) man page | <https://man7.org/linux/man-pages/man8/logrotate.8.html> | D |
+| S28 | uv documentation | <https://docs.astral.sh/uv/> | D |
+| S29 | HTTPX documentation | <https://www.python-httpx.org/> | D |
+| S30 | pytest-httpserver documentation | <https://pytest-httpserver.readthedocs.io/> | D |
+| S31 | Ruff documentation | <https://docs.astral.sh/ruff/> | D |
+| S32 | ShellCheck | <https://www.shellcheck.net/> | D |
+| S33 | pre-commit | <https://pre-commit.com/> | D |
+| S34 | gitleaks (GitHub) | <https://github.com/gitleaks/gitleaks> | D |
+| S35 | Klipper Discourse: Sonic Pad - Mainline Klipper | <https://klipper.discourse.group/t/sonic-pad-mainline-klipper/8832> | S |
+| S36 | Mainsail Docs: OrcaSlicer | <https://docs.mainsail.xyz/slicers/orcaslicer/> | P |
+| S37 | Fluidd Docs: Slicer uploads | <https://docs.fluidd.xyz/features/slicer-uploads/> | P |
+| S38 | Moonraker: Configuration | <https://moonraker.readthedocs.io/en/latest/configuration/> | P |
+| S39 | Klipper: Configuration reference | <https://www.klipper3d.org/Config_Reference.html> | D |
+| S40 | Klipper: TMC drivers | <https://www.klipper3d.org/TMC_Drivers.html> | D |
+| S41 | Klipper: Bed Mesh | <https://www.klipper3d.org/Bed_Mesh.html> | D |
+| S42 | Klipper: Resonance Compensation | <https://www.klipper3d.org/Resonance_Compensation.html> | D |
+| S43 | Klipper: Pressure Advance | <https://www.klipper3d.org/Pressure_Advance.html> | D |
+| S44 | Klipper: Rotation Distance | <https://www.klipper3d.org/Rotation_Distance.html> | D |
+| S45 | Klipper: Status Reference | <https://www.klipper3d.org/Status_Reference.html> | D |
+| S46 | marcogabriel/klipper-config-skr-1.3-creality-cr-10s (GitHub) | <https://github.com/marcogabriel/klipper-config-skr-1.3-creality-cr-10s> | P |
+| S47 | 3dwork: Complete guide SKR v1.4 and TMC2209 | <https://3dwork.io/en/complete-guide-skr-v1-4-and-tmc2209/> | P |
+| S48 | sajrashid/klipper_config (GitHub) | <https://github.com/sajrashid/klipper_config> | P |
+| S49 | Chris's Basement: SKR 1.4 – TMC2209 v1.2 UART (YouTube) | <https://www.youtube.com/watch?v=ujaqZknWqTo> | P |
+| S50 | Chris's Basement: SKR 1.4 Full Install Part 1 – 2209 Drivers (YouTube) | <https://www.youtube.com/watch?v=oHMZ0ocTYvM> | P |
+| S51 | SimplyPrint: Sonic Pad setup guide | <https://simplyprint.io/setup-guide/methods/sonic-pad.md> | P |
+| S52 | fran6p/SonicPad: Obico on Sonic Pad | <https://github.com/fran6p/SonicPad/blob/main/Obico/obico-spad.md> | P |
+| S53 | Creality forum: Cura can't send wireless print files to SonicPad | <https://forum.creality.com/t/cura-cant-send-wireless-print-files-to-sonicpad/5712> | P |
+| S54 | OpenSCAD man page | <https://man.archlinux.org/man/openscad.1.en> | P |
+| S55 | FreeCAD Wiki: Mesh Export | <https://wiki.freecad.org/Mesh_Export> | P |
+| S56 | Creality CR Touch Auto Leveling Kit (Amazon) | <https://www.amazon.com/gp/product/B09DVYZSYJ> | P |
+| S57 | Bondtech BMG CR-10S kit | <https://www.bondtech.se/product/creality-cr-10s-kit/> | P |
+| S58 | Micro Swiss All-Metal Hotend Kit for Creality | <https://www.matterhackers.com/store/l/micro-swiss-all-metal-hotend-kit-for-creality3d/sk/M3XFTAQN> | P |
+| S59 | BIGTREETECH Pad 7 (fallback host) | <https://biqu.equipment/products/bigtreetech-pad-7> | P |
+
+## Complexity Tracking
+
+No constitution violations. Not needed.

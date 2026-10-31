@@ -4,7 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-Early stage: docs + planning only. No code, build, or tests yet. Not yet a git repo (`input/my-prompts.md` 5th prompt: create repo, README via `/readme-wizard`, push to GitHub, then `docs/prd.md` + `docs/plan.md`).
+Planning done, no code yet. Repo: github.com/jeffskinnerbox/cr10s-klipper-upgrade (public). Next: `/speckit-tasks`, then implement Phase 0 of the plan.
+
+## Spec-Driven Workflow (spec-kit)
+
+Use the `/speckit-*` skills for all phases (user requirement).
+
+- Masters: `specs/001-klipper-print-workflow/` (`spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`, `tasks.md`). Active feature in `.specify/feature.json`.
+- `docs/prd.md` and `docs/plan.md` are GENERATED copies. Never edit them; edit the master, then run `bin/sync-docs`.
+- Constitution: `.specify/memory/constitution.md` (phased tests, safety gate, portable config, tests, JSON logging, no secrets).
+- Decisions from the grill-me session: `docs/decisions.md`. Read it before changing scope.
+- Don't edit `.claude/skills/speckit-*` or `.specify/` scripts/templates (vendored; hashes in `.specify/integrations/*.manifest.json`).
 
 ## Goal
 
@@ -38,7 +48,7 @@ Hardware in hand: Creality Sonic Pad (Klipper host), BTT SKR V1.4 mainboard, TMC
 
 ## Conventions
 
-- Markdown linted with `markdownlint-cli2` using `.markdownlint-cli2.jsonc` (symlink to dotfiles; `fix: true`, line length 300). Existing docs number ordered lists `1.` for every item. Run: `markdownlint-cli2 "**/*.md"`.
+- Markdown linted with `markdownlint-cli2` using `.markdownlint-cli2.jsonc` (symlink to dotfiles, not committed; line length 300). CAUTION: it has `fix: true` and globs `**/*.md`, so running it from the repo root auto-rewrites every Markdown file, including the vendored spec-kit skills. To lint only, run from a dir with a `fix: false` config and pass absolute paths. Existing docs number ordered lists `1.` for every item.
 - Docs use reference-style links (`[text][NN]`) with definitions at file bottom.
 - `*.bak*` and `secret*` files are git-ignored; never commit secrets (Moonraker tokens, Telegram bot tokens, etc.).
 - Code language: Python or Bash.
