@@ -1,0 +1,24 @@
+# Copy to ~/.config/cr10s/config.toml and edit. The real file stays outside the repo.
+# Any value can be overridden with CR10S_<SECTION>_<KEY>, e.g. CR10S_PAD_URL.
+
+[pad]
+url = "http://sonicpad.lan"      # add :7125 or :7128 if Moonraker is not behind the UI port
+timeout_s = 10                   # 1-60
+
+[upload]
+path = "auto"                    # relative sub-directory on the Pad, no ".."
+
+[watch]
+poll_s = 5                       # 2-60
+unreachable_after = 3            # consecutive failed polls before an alert
+stall_min = 15                   # 0 disables the stall check
+
+[notify]
+desktop = true
+ntfy_url = "https://ntfy.sh"
+ntfy_topic = "REPLACE_WITH_RANDOM_TOPIC"   # secret; 1-64 chars [A-Za-z0-9_-]; empty disables phone alerts
+
+[log]
+# dir defaults to $XDG_STATE_HOME/cr10s (~/.local/state/cr10s)
+retention_days = 180             # >= 1
+max_bytes = 52428800             # >= 1 MB (1048576)

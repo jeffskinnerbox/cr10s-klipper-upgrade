@@ -1,0 +1,5 @@
+{"ts": "2025-09-27T12:00:00.000Z", "level": "INFO", "tool": "upload", "event": "upload_ok", "run_id": "00000000-0000-4000-8000-000000000000", "msg": "record 0"}
+this is not json
+{"ts": "2026-10-22T12:00:00.000Z", "level": "INFO", "tool": "upload", "event": "upload_ok", "run_id": "00000000-0000-4000-8000-000000000000", "msg": "record 1"}
+{"no_ts": 1}
+{"ts": "2026-
