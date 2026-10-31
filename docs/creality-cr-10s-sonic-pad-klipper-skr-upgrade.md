@@ -1,0 +1,1 @@
+/home/jeff/blogging/content/ideas/creality-cr-10s-sonic-pad-klipper-skr-upgrade.md
