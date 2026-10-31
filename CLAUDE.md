@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-Planning done, no code yet. Repo: github.com/jeffskinnerbox/cr10s-klipper-upgrade (public). `tasks.md` exists (104 tasks; Phase 1 Setup, Phase 2 Foundational, Phases 3-10 = US1-US8, Phase 11 Polish) and has had `/speckit-analyze` fixes applied. Next: `/speckit-implement` starting at Phase 1; MVP = US1 (Phase 3).
+Planning done, no code yet. Repo: github.com/jeffskinnerbox/cr10s-klipper-upgrade (public).
+`tasks.md` exists (104 tasks; Phase 1 Setup, Phase 2 Foundational, Phases 3-10 = US1-US8, Phase 11 Polish) and has had `/speckit-analyze` fixes applied. Next: `/speckit-implement` starting at Phase 1; MVP = US1 (Phase 3).
 
 ## Spec-Driven Workflow (spec-kit)
 
@@ -48,7 +49,8 @@ Hardware in hand: Creality Sonic Pad (Klipper host), BTT SKR V1.4 mainboard, TMC
 
 ## Conventions
 
-- Markdown linted with `markdownlint-cli2` using `.markdownlint-cli2.jsonc` (symlink to dotfiles, not committed; line length 300). CAUTION: it has `fix: true` and globs `**/*.md`, so running it from the repo root auto-rewrites every Markdown file, including the vendored spec-kit skills. To lint only, run from a dir with a `fix: false` config and pass absolute paths. Existing docs number ordered lists `1.` for every item.
+- Markdown linted with `markdownlint-cli2`. The root `.markdownlint-cli2.jsonc` (symlink to dotfiles, not committed; line length 300) has `fix: true` and globs `**/*.md`, so running `markdownlint-cli2` from the repo root auto-rewrites every Markdown file, including the vendored spec-kit skills.
+  Lint only via `bin/mdlint [files]` (fix off, uses `ci.markdownlint-cli2.jsonc`); `make lint` and pre-commit call it. Existing docs number ordered lists `1.` for every item.
 - Docs use reference-style links (`[text][NN]`) with definitions at file bottom.
 - `*.bak*` and `secret*` files are git-ignored; never commit secrets (Moonraker tokens, Telegram bot tokens, etc.).
 - Code language: Python or Bash.

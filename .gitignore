@@ -99,3 +99,12 @@ full_build/backup/
 .env.*
 config.toml
 !config.example.toml
+
+### cr10s build / tooling artifacts
+/build/
+*.jsonl
+!tests/fixtures/logs/*.jsonl
+.venv/
+printer/firmware/*.bin
+.pytest_cache/
+.ruff_cache/

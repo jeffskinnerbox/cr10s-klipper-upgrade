@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# mdlint -- lint Markdown with fix OFF, regardless of the repo's markdownlint config.
+# The repo-root .markdownlint-cli2.jsonc (symlink to dotfiles) has fix:true, and
+# markdownlint-cli2 lets it override --config. So lint a throwaway copy of the files
+# with ci.markdownlint-cli2.jsonc installed as that dir's config.
+# Usage: bin/mdlint [FILE.md ...]   (default: all git-tracked and new *.md)
+set -euo pipefail
+
+root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+cd "$root"
+
+if (($# > 0)); then
+  files=("$@")
+else
+  mapfile -t files < <(git ls-files --cached --others --exclude-standard -- '*.md')
+fi
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+for f in "${files[@]}"; do
+  [[ -f "$f" ]] || continue
+  mkdir -p "$tmp/$(dirname "$f")"
+  cp "$f" "$tmp/$f"
+done
+cp ci.markdownlint-cli2.jsonc "$tmp/.markdownlint-cli2.jsonc"
+
+cd "$tmp"
+npx --yes markdownlint-cli2@0.19.1 --no-globs "${files[@]}"

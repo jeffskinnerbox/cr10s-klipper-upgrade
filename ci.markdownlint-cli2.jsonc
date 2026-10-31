@@ -1,0 +1,35 @@
+// Used by bin/mdlint (installed as .markdownlint-cli2.jsonc in a temp dir). Copy of the dotfiles markdownlint-cli2 config, with fix off.
+// Keep rule settings in step with ~/.dotfiles/.markdownlint-cli2.jsonc.
+{
+  // no "globs": pre-commit supplies the file list
+  "config": {
+    "default": true,
+    "MD012": false,
+    "MD013": {
+      "line_length": 300,
+      "ignore_code_blocks": true,
+      "tables": true
+    },
+    "MD022": false,
+    "MD024": false,
+    "MD032": false,
+    "MD033": false,
+    "MD036": false,
+    "MD041": false,
+    "MD045": false,
+    "MD060": false,  // table column style: newer than the dotfiles markdownlint; spec tables are not aligned
+    "MD048": {
+      "style": "consistent"
+    }
+  },
+  "ignores": [
+    "node_modules",
+    "dist",
+    "build",
+    ".venv/**",
+    ".claude/**",   // vendored tool files (e.g. spec-kit skills)
+    ".specify/**",  // spec-kit scripts/templates; hashes checked by spec-kit
+    "docs/creality-cr-10s-*.md"  // legacy link collections, not maintained
+  ],
+  "fix": false
+}
