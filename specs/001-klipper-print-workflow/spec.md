@@ -95,7 +95,8 @@ the tilt is fixed and a full-bed first-layer test print sticks evenly.
 1. **Given** the gantry is out of level by up to 2 mm, **When** the leveling routine runs,
    **Then** the two sides end within 0.05 mm of each other.
 1. **Given** a probed bed mesh, **When** a full-bed first-layer pattern prints, **Then** the
-   line height looks even and there are no unstuck areas.
+   all 49 squares of a 7×7 first-layer test stick, and each measures 0.20 mm ±0.05 mm thick
+   with calipers.
 1. **Given** the probe fails to deploy, **When** homing starts, **Then** homing stops with an
    error and the nozzle does not hit the bed.
 
@@ -229,8 +230,8 @@ and adds FreeCAD export to the one-command workflow.
 independent and has its own test.
 
 **Independent Test**: each upgrade has its own guide and pass/fail test, for example: webcam view
-appears in the UI; extruder pushes 100 mm ±1 mm; hot end holds 260 °C ±2 °C; overhang test better
-than baseline; PEI first layer sticks; mainline host passes the US1 test; FreeCAD part goes through
+appears in the UI; extruder pushes 100 mm ±1 mm; hot end holds 260 °C ±2 °C; a 20°–70° overhang test (5° steps)
+prints a clean overhang at least 10° steeper than the stock-fan baseline; PEI first layer sticks; mainline host passes the US1 test; FreeCAD part goes through
 US5.
 
 **Acceptance Scenarios**:

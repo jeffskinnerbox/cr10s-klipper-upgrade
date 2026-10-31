@@ -13,10 +13,14 @@ All commands share these rules:
 - Computes the SHA-256 and POSTs to `/server/files/upload` with `root=gcodes`, `print=false`
   and `checksum`.
 - **MUST NOT** send `print=true`. There is no flag that enables it. A test asserts the form field.
+- Never leaves a partial file: a failed or aborted upload leaves nothing new on the host, and a
+  file with the same name is only replaced after the host accepts the checksum.
 - Refuses non-`.gcode` files (exit 1). Refuses to upload if the file is empty (exit 1).
 - On 201: prints the remote path, plus estimated time and filament if metadata is available.
 - On 422: exit 3, event `checksum_mismatch`.
-- On connect error or timeout (default 10 s, total ≤ 15 s): exit 2.
+- On connect error or timeout: exit 2 within `timeout_s` + 5 s (≤ 15 s at the default
+  `timeout_s` of 10). Once the host has accepted the connection, the upload body has no total
+  time cap, so large files on a slow link still finish.
 
 ## `cr10s-status [--watch-once]`
 

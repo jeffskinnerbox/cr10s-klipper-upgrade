@@ -152,6 +152,11 @@ copy `templates/model-project/`.
 
 ## Build Phases
 
+Numbering note: the phases here (0–16) are the build order and name the guides
+(`docs/build/phase-NN-*.md`). The `## Phase N` headings in `tasks.md` are spec-kit stages
+(Setup, Foundational, one per user story, Polish). Tasks always say "Plan Phase N" when they mean
+a phase in this section.
+
 Each phase lists its **HW** (assembly), **Wire**, **Cfg** (printer/Pad config), **Code**,
 **Proto** (prototype or check to do first) and **Test** (exit gate). Don't start a phase until
 the exit test of the one before it is recorded as a pass in `docs/build/test-log.md`. The printer
@@ -223,7 +228,7 @@ keeps working on stock Marlin until Phase 3, so you can still print while Phases
 - **Proto**: `BLTOUCH_DEBUG COMMAND=pin_down/pin_up` and `QUERY_PROBE` before any homing.
   Hold a finger under the nozzle on the first `G28 Z`.
 - **Test (US2)**: with the gantry tilted 1–2 mm, `Z_TILT_ADJUST` brings it within 0.05 mm.
-  `PROBE_ACCURACY` range < 0.02 mm. A full-bed first-layer print looks even. With the probe
+  `PROBE_ACCURACY` range < 0.02 mm. A 7×7 first-layer test: all 49 squares stick and each is 0.20 mm ±0.05 mm thick. With the probe
   unplugged, homing stops with an error.
 
 ### Phase 5 — BTT SFS V2 filament sensor
@@ -293,7 +298,7 @@ keeps working on stock Marlin until Phase 3, so you can still print while Phases
 | 11    | USB webcam                            | Plug into the Pad and set up `[webcam]`/crowsnest in the Pad UI           | Live view and time-lapse in Fluidd                 |
 | 12    | PEI spring steel sheet                | Swap the bed surface. `PROBE_CALIBRATE` for a new Z offset                 | First-layer test sticks; part releases when cool  |
 | 13    | BMG extruder                          | Mount it, set `rotation_distance` and gear ratio, then retune pressure advance | 100 mm extrude = 100 ± 1 mm; PA tower clean   |
-| 14    | Micro Swiss hot end + 5015 blower     | Swap the hot end. 5015 on FAN0, hot end fan on HE1 `[heater_fan]`. Printed duct. PID again | Holds 260 °C ±2 °C; overhang test beats baseline |
+| 14    | Micro Swiss hot end + 5015 blower     | Swap the hot end. 5015 on FAN0, hot end fan on HE1 `[heater_fan]`. Printed duct. PID again | Holds 260 °C ±2 °C; 20°–70° overhang test: clean angle ≥10° steeper than baseline |
 | 15    | Pad to Debian/mainline + Mainsail     | Back up, reflash the Pad per the community guide, restore config, rebuild the MCU to match | US1–US7 pass on mainline; Mainsail serves the UI |
 | 16    | FreeCAD export                        | `freecadcmd export.py` target in the model template                       | FreeCAD part goes through US5                      |
 

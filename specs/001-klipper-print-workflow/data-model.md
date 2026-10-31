@@ -79,8 +79,10 @@ print:   standby|complete|cancelled --> printing   alert: print_started
          printing, progress unchanged ≥ stall_min  alert: print_stalled (once per stall)
 ```
 
-The first snapshot after start (or after the desktop wakes) sends one `watch_started` summary,
-not one alert per change.
+The first snapshot after start sends one `watch_started` summary, not one alert per change.
+If the gap since the last poll is more than `3 × poll_s` (for example after the desktop sleeps),
+the next snapshot sends one `watch_resumed` summary with the current state and the gap length,
+and no separate change alerts for that gap.
 
 ## Alert
 

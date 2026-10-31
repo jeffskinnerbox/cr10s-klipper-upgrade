@@ -29,7 +29,7 @@ prototype step. Source keys such as [S1] refer to the Sources list in [plan.md](
   | Part fan            | FAN0         | P2.3     | `[fan]`                                |
   | Spare PWM (later 5015 / hot end fan) | HE1 | P2.4 | `[heater_fan]` or `[fan_generic]` |
 
-  Z1 on E1M starts with the same direction as Z (`!P1.14`). The T040 jog test confirms all
+  Z1 on E1M starts with the same direction as Z (`!P1.14`). The T042 jog test confirms all
   directions.
 
 - **Rationale**: the Klipper config is the upstream reference. The Marlin header confirms the

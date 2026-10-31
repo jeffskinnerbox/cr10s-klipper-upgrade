@@ -20,7 +20,7 @@ Core events (tools may add more, but must not rename these):
 
 `run_start`, `run_end`, `config_loaded`, `config_invalid`, `http_request`, `http_error`,
 `host_unreachable`, `upload_ok`, `checksum_mismatch`, `slice_ok`, `slice_failed`, `export_ok`,
-`export_failed`, `state_change`, `alert_sent`, `notify_failed`, `watch_started`, `watch_stopped`,
+`export_failed`, `state_change`, `alert_sent`, `notify_failed`, `watch_started`, `watch_resumed`, `watch_stopped`,
 `prune_done`, `backup_committed`, `backup_no_change`, `secret_scan_failed`.
 
 Query examples:
