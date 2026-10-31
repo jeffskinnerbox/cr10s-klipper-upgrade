@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-Planning done, no code yet. Repo: github.com/jeffskinnerbox/cr10s-klipper-upgrade (public). Next: `/speckit-tasks`, then implement Phase 0 of the plan.
+Planning done, no code yet. Repo: github.com/jeffskinnerbox/cr10s-klipper-upgrade (public). `tasks.md` exists (104 tasks; Phase 1 Setup, Phase 2 Foundational, Phases 3-10 = US1-US8, Phase 11 Polish) and has had `/speckit-analyze` fixes applied. Next: `/speckit-implement` starting at Phase 1; MVP = US1 (Phase 3).
 
 ## Spec-Driven Workflow (spec-kit)
 
