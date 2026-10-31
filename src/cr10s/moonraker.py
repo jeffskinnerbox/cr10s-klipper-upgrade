@@ -58,7 +58,7 @@ class Moonraker:
                 files={"file": (name or local.name, handle)},
                 log_extra={"file": str(local), "sha256": checksum},
             )
-        return self._result(resp)
+        return self._upload_reply(resp)
 
     def metadata(self, filename: str) -> dict | None:
         """File metadata, or None while the host has none (404)."""
@@ -109,8 +109,13 @@ class Moonraker:
             self._log.error(
                 "http_error", f"{method} {shown} -> {resp.status_code}", status=resp.status_code
             )
-        if resp.status_code == 422 and path == "/server/files/upload":
-            raise cli.ChecksumMismatch(f"Pad rejected the upload: {message}", resp.status_code)
+        if path == "/server/files/upload" and (
+            resp.status_code == 422 or "checksum mismatch" in resp.text.lower()
+        ):
+            # Upstream Moonraker answers 422. The Pad's fork answers 500 with the same text.
+            raise cli.ChecksumMismatch(
+                "Pad rejected the upload: checksum mismatch", resp.status_code
+            )
         raise cli.Rejected(f"HTTP {resp.status_code} from the Pad: {message}", resp.status_code)
 
     @staticmethod
@@ -119,6 +124,19 @@ class Moonraker:
             return str(resp.json()["error"]["message"])
         except (ValueError, KeyError, TypeError):
             return resp.text[:100] or resp.reason_phrase
+
+    @staticmethod
+    def _upload_reply(resp: httpx.Response) -> dict:
+        """Upstream wraps the reply in ``result``. The Pad's fork returns ``item`` at top level."""
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        if isinstance(body, dict) and isinstance(body.get("result"), dict):
+            body = body["result"]
+        if not isinstance(body, dict) or "item" not in body:
+            raise cli.Rejected("unexpected response from the Pad", resp.status_code)
+        return body
 
     @staticmethod
     def _result(resp: httpx.Response):

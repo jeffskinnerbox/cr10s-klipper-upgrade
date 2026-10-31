@@ -95,9 +95,9 @@ Pad on the network (Plan Phases 0 and 1). Every story depends on these.
 - [X] T022 Implement `src/cr10s/status.py` (`cr10s-status`) per [contracts/cli.md](contracts/cli.md#cr10s-status---watch-once): build a PrinterState dataclass with fields from data-model; print human or `--json` output
 - [X] T023 Run `make check` until T009 to T013 pass. Record "Plan Phase 0 exit" in `docs/build/test-log.md`
 - [X] T024 Write `docs/build/phase-01-pad-network.md`: power the Pad, connect Ethernet, set a DHCP reservation and the hostname `sonicpad.lan`, find the UI and Moonraker ports, add the desktop IP to `[authorization] trusted_clients` in `moonraker.conf` from Fluidd's config editor, and write the exit test
-- [ ] T025 Operator: carry out `docs/build/phase-01-pad-network.md`. Record the ports in `docs/decisions.md` under Assumptions, and set `pad.url` in `~/.config/cr10s/config.toml`
-- [ ] T026 Prototype research R8 with curl, following steps added to `docs/build/phase-01-pad-network.md`: upload with a wrong `checksum` (expect 422) and check that metadata has `estimated_time`. Record the results in `specs/001-klipper-print-workflow/research.md` under R8, then run `bin/sync-docs`
-- [ ] T027 Run `make test-live` (T014). Record "Plan Phase 1 exit" in `docs/build/test-log.md`
+- [X] T025 Operator: carry out `docs/build/phase-01-pad-network.md`. Record the ports in `docs/decisions.md` under Assumptions, and set `pad.url` in `~/.config/cr10s/config.toml`
+- [X] T026 Prototype research R8 with curl, following steps added to `docs/build/phase-01-pad-network.md`: upload with a wrong `checksum` (expect 422) and check that metadata has `estimated_time`. Record the results in `specs/001-klipper-print-workflow/research.md` under R8, then run `bin/sync-docs`
+- [X] T027 Run `make test-live` (T014). Record "Plan Phase 1 exit" in `docs/build/test-log.md`
 
 **Checkpoint**: tools can read the Pad. Logging and pruning work. User stories can begin.
 

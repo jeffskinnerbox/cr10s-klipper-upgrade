@@ -56,6 +56,9 @@ class FakeMoonraker:
     metadata_enabled: bool = True
     metadata_overrides: dict[str, dict] = field(default_factory=dict)
     checksum_mode: str = "enforce"  # "enforce", or "ignore" for a fork that skips the check
+    pad_style: bool = (
+        False  # mimic the Sonic Pad fork: bad checksum is a 500, upload reply unwrapped
+    )
     server_info: dict = field(
         default_factory=lambda: {
             "klippy_connected": True,
@@ -176,6 +179,13 @@ class FakeMoonraker:
         want = fields.get("checksum")
         ok = self.checksum_mode == "ignore" or want is None or want.lower() == digest
         self.uploads.append(Upload(fields, upload.filename, content, digest, ok))
+        if not ok and self.pad_style:
+            err = {
+                "code": 500,
+                "message": "Internal Server Error",
+                "traceback": "ServerError: File checksum mismatch: expected x",
+            }
+            return self._json({"error": err}, 500)
         if not ok:
             return self._json({"error": {"code": 422, "message": "checksum mismatch"}}, 422)
         subdir = fields.get("path", "").strip("/")
@@ -183,7 +193,8 @@ class FakeMoonraker:
         self.gcodes[dest] = content  # replaced only after the checksum is accepted
         item = {"path": dest, "root": "gcodes", "size": len(content), "modified": time.time()}
         result = {"item": item, "print_started": False, "print_queued": False}
-        return self._json({"result": {**result, "action": "create_file"}}, 201)
+        reply = {**result, "action": "create_file"}
+        return self._json(reply if self.pad_style else {"result": reply}, 201)
 
     def _metadata(self, filename: str) -> Response:
         if not self.metadata_enabled or filename not in self.gcodes:

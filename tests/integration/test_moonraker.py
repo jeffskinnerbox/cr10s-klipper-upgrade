@@ -66,6 +66,20 @@ def test_bad_checksum_raises_checksum_mismatch_and_keeps_the_old_file(
     assert fake_moonraker.gcodes["proj/part.gcode"] == b"old"
 
 
+def test_pad_fork_quirks_500_checksum_mismatch_and_unwrapped_reply(
+    client, fake_moonraker, gcode_file
+):
+    fake_moonraker.pad_style = True
+    with pytest.raises(cli.ChecksumMismatch) as exc:
+        client.upload(gcode_file, "proj", "0" * 64)
+    assert exc.value.status == 500
+    assert exc.value.exit_code == 3
+    assert "proj/part.gcode" not in fake_moonraker.gcodes
+    reply = client.upload(gcode_file, "proj", SHA)
+    assert reply["item"]["path"] == "proj/part.gcode"
+    assert reply["print_started"] is False
+
+
 def test_metadata_and_missing_metadata(client, fake_moonraker, gcode_file):
     client.upload(gcode_file, "proj", SHA)
     assert client.metadata("proj/part.gcode")["estimated_time"] == 3600.0

@@ -112,6 +112,8 @@ Continue to use the /spec-kit skill throughout all the subsequent phases of this
 
 Make sure no secrets are written to your git repository.
 
-Use the /grill-me skill so I can answer all question you might have.
+Use the /grill-me skill so I can answer all question you might hav
 
 ---
+
+claude --resume ecc1e3d8-d112-4872-b6a0-b9f6c66f86d8

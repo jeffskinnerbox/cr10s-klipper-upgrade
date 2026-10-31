@@ -25,4 +25,6 @@ Decisions from the grill-me session on 2026-10-30, before writing the PRD and pl
 
 - The desktop runs Ubuntu with Python 3.12+ and `uv` installed.
 - 5 TMC2209 drivers are on hand, to be confirmed in the first hardware phase.
-- The Moonraker port and UI port on the Pad are unknown until the connectivity phase.
+- Pad ports (confirmed 2026-10-31): Moonraker on 7125 (`http://<pad-ip>:7125`), UI on 80. Moonraker version reports `?` (Creality fork).
+- Pad IP is 192.168.1.152 from DHCP. The Pad UI has no static-IP setting. The router reservation (Verizon G3100, target 192.168.1.205) is deferred: **TODO before the first long print and before `cr10s-watch` runs unattended.**
+- With no MCU attached, Klipper reports `shutdown` ("Lost communication with MCU") and `/printer/objects/query` still returns HTTP 200, so no `/server/info` fallback is needed in `status.poll()`.
