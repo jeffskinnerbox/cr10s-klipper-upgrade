@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter', system-ui, sans-serif; }
+    .disp { font-family: 'Space Grotesk', system-ui, sans-serif; }
+    .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  </style>
+</helmet>
+<div style="width:1040px; background:#fbfaf7; box-sizing:border-box; padding:32px 44px 26px; display:flex; flex-direction:column; gap:16px;">
+  <div class="disp" style="font-size:26px; font-weight:700; color:#1e2230;">SKR V1.4 &rarr; TMC2209 UART (via socket jumpers)</div>
+  <div style="background:#fff; border:1px solid #dcd9d0; border-radius:16px; padding:28px 40px;">
+    <svg viewBox="0 0 950 480" width="950" height="480" style="display:block; overflow:visible;"><g><rect x="40" y="20" width="260" height="440" rx="10" fill="#1f3a5f" stroke="#142840" stroke-width="2"/><text x="170" y="56" text-anchor="middle" class="disp" font-size="18" font-weight="700" fill="#fff">SKR V1.4 Turbo</text><text x="290" y="125" text-anchor="end" class="mono" font-size="14" font-weight="600" fill="#fff">XM UART P1.10</text><text x="290" y="195" text-anchor="end" class="mono" font-size="14" font-weight="600" fill="#fff">YM UART P1.9</text><text x="290" y="265" text-anchor="end" class="mono" font-size="14" font-weight="600" fill="#fff">ZAM UART P1.8</text><text x="290" y="335" text-anchor="end" class="mono" font-size="14" font-weight="600" fill="#fff">E0M UART P1.4</text><text x="290" y="405" text-anchor="end" class="mono" font-size="14" font-weight="600" fill="#fff">E1M UART P1.1</text></g><g><rect x="650" y="20" width="260" height="440" rx="10" fill="#4a3f6b" stroke="#2f2748" stroke-width="2"/><text x="780" y="56" text-anchor="middle" class="disp" font-size="18" font-weight="700" fill="#fff">TMC2209 drivers</text><text x="664" y="125" class="mono" font-size="14" font-weight="600" fill="#fff">PDN_UART (X)</text><text x="664" y="195" class="mono" font-size="14" font-weight="600" fill="#fff">PDN_UART (Y)</text><text x="664" y="265" class="mono" font-size="14" font-weight="600" fill="#fff">PDN_UART (Z)</text><text x="664" y="335" class="mono" font-size="14" font-weight="600" fill="#fff">PDN_UART (E0)</text><text x="664" y="405" class="mono" font-size="14" font-weight="600" fill="#fff">PDN_UART (Z1)</text></g><g fill="none" stroke-width="3.5" stroke-linecap="round" stroke="#2563eb"><path d="M300 120 C 420 120, 530 120, 650 120"/><path d="M300 190 C 420 190, 530 190, 650 190"/><path d="M300 260 C 420 260, 530 260, 650 260"/><path d="M300 330 C 420 330, 530 330, 650 330"/><path d="M300 400 C 420 400, 530 400, 650 400"/></g><g fill="#2563eb"><circle cx="300" cy="120" r="6"/><circle cx="650" cy="120" r="6"/><circle cx="300" cy="190" r="6"/><circle cx="650" cy="190" r="6"/><circle cx="300" cy="260" r="6"/><circle cx="650" cy="260" r="6"/><circle cx="300" cy="330" r="6"/><circle cx="650" cy="330" r="6"/><circle cx="300" cy="400" r="6"/><circle cx="650" cy="400" r="6"/></g></svg>
+  </div>
+  <div style="font-size:14px; color:#3a3f4c;"><span style="display:inline-block; width:26px; height:4px; background:#2563eb; vertical-align:middle;"></span> UART signal (made by the jumpers under each socket)</div>
+  <div style="font-size:13px; color:#6b7080;">Schematic, not to scale.</div>
+</div>
+</x-dc>
+</body>
+</html>
