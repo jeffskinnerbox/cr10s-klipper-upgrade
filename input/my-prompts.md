@@ -116,5 +116,5 @@ Use the /grill-me skill so I can answer all question you might have.
 
 ---
 
-To Start Phase 3:
+To Do T032:
 claude --resume ecc1e3d8-d112-4872-b6a0-b9f6c66f86d8
